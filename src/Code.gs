@@ -6,6 +6,10 @@ const THEME = {
   icon: "https://cdn-icons-png.flaticon.com/512/3342/3342137.png"
 };
 
+// Using Unicode formatting characters to strongly suggest RTL rendering for the text itself
+const RTL = '\u202B'; 
+const POP = '\u202C';
+
 const TEXT = {
   en: {
     title: "Image Sender",
@@ -27,23 +31,23 @@ const TEXT = {
     body: "Attached is the image you shared via the Image Sender add-on."
   },
   he: {
-    title: "שולח התמונות",
-    subtitle: "שתף תמונות ברגע",
-    urlLabel: "קישור לתמונה",
-    urlHint: "הדבק קישור או Base64 כאן...",
-    btnInbox: "שלח לתיבה שלי",
-    btnOther: "שלח לאדם אחר",
+    title: RTL + "שולח התמונות" + POP,
+    subtitle: RTL + "שתף תמונות ברגע" + POP,
+    urlLabel: RTL + "קישור לתמונה" + POP,
+    urlHint: RTL + "הדבק קישור או Base64 כאן..." + POP,
+    btnInbox: RTL + "שלח לתיבה שלי" + POP,
+    btnOther: RTL + "שלח לאדם אחר" + POP,
     btnLang: "🌐 Switch to English",
-    otherTitle: "פרטי הנמען",
-    emailLabel: "אימייל הנמען",
-    btnSend: "שלח עכשיו",
-    btnBack: "חזור",
-    success: "הצליח! התמונה נשלחה.",
-    error: "שגיאה: ",
-    invalidUrl: "אנא ספק קישור תקין.",
-    invalidEmail: "כתובת אימייל לא תקינה.",
-    subject: "תמונה ששותפה איתך",
-    body: "מצורפת התמונה ששותפה דרך תוסף שולח התמונות."
+    otherTitle: RTL + "פרטי הנמען" + POP,
+    emailLabel: RTL + "אימייל הנמען" + POP,
+    btnSend: RTL + "שלח עכשיו" + POP,
+    btnBack: RTL + "חזור" + POP,
+    success: RTL + "הצליח! התמונה נשלחה." + POP,
+    error: RTL + "שגיאה: " + POP,
+    invalidUrl: RTL + "אנא ספק קישור תקין." + POP,
+    invalidEmail: RTL + "כתובת אימייל לא תקינה." + POP,
+    subject: RTL + "תמונה ששותפה איתך" + POP,
+    body: RTL + "מצורפת התמונה ששותפה דרך תוסף שולח התמונות." + POP
   }
 };
 
@@ -81,35 +85,33 @@ function createMainCard(e) {
   inputSection.addWidget(urlInput);
   card.addSection(inputSection);
 
-  // 3. Actions Section (Modern Button Group)
+  // 3. Actions Section (Stacked Vertically for cleaner UI)
   var actionSection = CardService.newCardSection();
-  var buttonSet = CardService.newButtonSet();
 
   var selfAction = CardService.newAction().setFunctionName("processImage").setParameters({target: "self"});
   var selfBtn = CardService.newTextButton()
     .setText(t.btnInbox)
     .setOnClickAction(selfAction)
-    .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED); // Primary colored button
   
   var otherAction = CardService.newAction().setFunctionName("buildOtherCard");
   var otherBtn = CardService.newTextButton()
     .setText(t.btnOther)
-    .setOnClickAction(otherAction);
+    .setOnClickAction(otherAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.TEXT); // Secondary clean text button
 
-  buttonSet.addButton(selfBtn);
-  buttonSet.addButton(otherBtn);
-  actionSection.addWidget(buttonSet);
+  // Adding them sequentially creates a clean vertical stack
+  actionSection.addWidget(selfBtn);
+  actionSection.addWidget(otherBtn);
   card.addSection(actionSection);
 
-  // 4. Footer Section (Language Toggle)
-  var footerSection = CardService.newCardSection();
+  // 4. Fixed Footer (Pinned to the absolute bottom)
   var langAction = CardService.newAction().setFunctionName("toggleLanguage");
-  var langBtn = CardService.newDecoratedText()
-    .setText(t.btnLang)
-    .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.DESCRIPTION))
-    .setOnClickAction(langAction);
-  footerSection.addWidget(langBtn);
-  card.addSection(footerSection);
+  var footer = CardService.newFixedFooter()
+    .setPrimaryButton(CardService.newTextButton()
+      .setText(t.btnLang)
+      .setOnClickAction(langAction));
+  card.setFixedFooter(footer);
 
   return card.build();
 }
@@ -135,9 +137,8 @@ function buildOtherCard(e) {
   
   card.addSection(mainSection);
 
-  // Actions Section
+  // Actions Section (Stacked Vertically)
   var actionSection = CardService.newCardSection();
-  var buttonSet = CardService.newButtonSet();
 
   var sendAction = CardService.newAction().setFunctionName("processImage").setParameters({target: "other"});
   var sendBtn = CardService.newTextButton()
@@ -148,13 +149,20 @@ function buildOtherCard(e) {
   var backAction = CardService.newAction().setFunctionName("goBack");
   var backBtn = CardService.newTextButton()
     .setText(t.btnBack)
-    .setOnClickAction(backAction);
+    .setOnClickAction(backAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.TEXT);
 
-  buttonSet.addButton(sendBtn);
-  buttonSet.addButton(backBtn);
-  actionSection.addWidget(buttonSet);
-
+  actionSection.addWidget(sendBtn);
+  actionSection.addWidget(backBtn);
   card.addSection(actionSection);
+
+  // Fixed Footer
+  var langAction = CardService.newAction().setFunctionName("toggleLanguage");
+  var footer = CardService.newFixedFooter()
+    .setPrimaryButton(CardService.newTextButton()
+      .setText(t.btnLang)
+      .setOnClickAction(langAction));
+  card.setFixedFooter(footer);
 
   return CardService.newActionResponseBuilder().setNavigation(CardService.newNavigation().pushCard(card.build())).build();
 }
