@@ -27,6 +27,7 @@ const TEXT = {
     error: "Error: ",
     invalidUrl: "Please provide a valid link.",
     invalidEmail: "Invalid email address.",
+    errBlob: "Cannot read 'blob:' links. Please copy the actual Image Address or use Base64.",
     subject: "Shared Image",
     body: "Attached is the image you shared via the Image Sender add-on."
   },
@@ -46,6 +47,7 @@ const TEXT = {
     error: RTL + "שגיאה: " + POP,
     invalidUrl: RTL + "אנא ספק קישור תקין." + POP,
     invalidEmail: RTL + "כתובת אימייל לא תקינה." + POP,
+    errBlob: RTL + "לא ניתן לקרוא קישורי 'blob:'. אנא העתק את כתובת התמונה המקורית או השתמש ב-Base64." + POP,
     subject: RTL + "תמונה ששותפה איתך" + POP,
     body: RTL + "מצורפת התמונה ששותפה דרך תוסף שולח התמונות." + POP
   }
@@ -191,6 +193,11 @@ function processImage(e) {
   var recipient = Session.getActiveUser().getEmail();
 
   if (!imageUrl) return createNotification(t.invalidUrl);
+  
+  // Explicitly catch and reject blob links with a helpful message
+  if (imageUrl.startsWith("blob:")) {
+    return createNotification(t.errBlob);
+  }
 
   if (target === "other") {
     recipient = e.formInput.recipientEmail;
