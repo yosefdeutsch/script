@@ -1,244 +1,73 @@
 /**
-* Saves images and logs: Date, Sender, Subject, Filename, and Link.
-*/
-function saveImagesWithLogging() {
-// --- CONFIGURATION ---
-const SS_ID = "1mV4_7SZidjhlyTTB0U9qxc7M2L7Wi-XsBSOyQNkQeJI";
-const TARGET_FOLDER_NAME = "SavedImages";
-const LAST_PROCESSED_KEY = 'lastProcessedDate';
+ * Builds the homepage interface for the add-on.
+ * This runs when you open the add-on from the Gmail sidebar.
+ */
+function buildHomepage(e) {
+  var card = CardService.newCardBuilder();
+  card.setHeader(CardService.newCardHeader().setTitle("Image to Inbox"));
 
-try {
-const ss = SpreadsheetApp.openById(SS_ID);
-const configSheet = ss.getSheetByName("Config");
-const logSheet = ss.getSheetByName("Log");
-const properties = PropertiesService.getScriptProperties();
+  var section = CardService.newCardSection();
 
-if (!configSheet || !logSheet) {
-throw new Error("Could not find tabs named 'Config' or 'Log'.");
-}
+  // Create a text input for the URL
+  var urlInput = CardService.newTextInput()
+    .setFieldName("imageUrl")
+    .setTitle("Paste Image URL")
+    .setHint("Must be a public HTTP/HTTPS link");
 
-// 1. GetEmails from Config Sheet
-const lastRow = configSheet.getLastRow();
-if (lastRow === 0) return;
+  // Create a button to trigger the sending action
+  var action = CardService.newAction().setFunctionName("processImage");
+  var button = CardService.newTextButton()
+    .setText("Send to Inbox")
+    .setOnClickAction(action)
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
 
-const emails = configSheet.getRange("A1:A" + lastRow).getValues()
-.flat()
-.filter(email => email && email.includes("@"));
+  section.addWidget(urlInput);
+  section.addWidget(button);
 
-// 2. Setup Main Folder
-const folders = DriveApp.getFoldersByName(TARGET_FOLDER_NAME);
-const mainFolder = folders.hasNext() ? folders.next() : DriveApp.createFolder(TARGET_FOLDER_NAME); // Renamed 'folder' to 'mainFolder'
+  card.addSection(section);
 
-// 3. Build Search Query
-let lastRun = properties.getProperty(LAST_PROCESSED_KEY);
-let query = `has:attachment (${emails.map(e => `from:${e}`).join(' OR ')})`;
-
-if (lastRun) {
-let formattedDate = Utilities.formatDate(new Date(lastRun), Session.getScriptTimeZone(), 'yyyy/MM/dd');
-query += ` after:${formattedDate}`;
-} else {
-query += ` is:unread`;
-}
-
-// 4. Process Messages
-const threads = GmailApp.search(query);
-let savedCount = 0;
-threads.forEach(thread => {
-const threadId = thread.getId();
-const threadSubject = thread.getSubject();
-// Sanitize subject for folder name: remove illegal characters, limit length
-const sanitizedSubject = threadSubject.replace(/[\\/:*?"<>|]/g, '').substring(0, 100).trim();
-const subfolderName = `${sanitizedSubject || 'No_Subject'}_${threadId}`;
-
-// Get or create the specific subfolder for this thread
-const threadFolder = findOrCreateSubfolder(mainFolder, subfolderName);
-
-thread.getMessages().forEach(message => {
-const sender = message.getFrom().toLowerCase();
-if (!emails.some(e => sender.includes(e.toLowerCase()))) return;
-
-const attachments = message.getAttachments();
-const subject = message.getSubject();
-let index = 1;
-
-attachments.forEach(attachment => {
-if (attachment.getContentType().startsWith('image/')) {
-const timestamp = Utilities.formatDate(message.getDate(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmm');
-const uniqueName = `${timestamp}_${index}_${attachment.getName()}`;
-
-// Check existence and save into the thread-specific subfolder
-if (!threadFolder.getFilesByName(uniqueName).hasNext()) {
-const file = threadFolder.createFile(attachment.setName(uniqueName));
-
-// 5. Log with Subject Line
-logSheet.appendRow([
-new Date(),
-
-message.getFrom(),
-subject,
-uniqueName,
-file.getUrl()
-]);
-
-savedCount++;
-index++;
-}
-}
-});
-message.markRead();
-});
-});
-
-properties.setProperty(LAST_PROCESSED_KEY, new Date().toISOString());
-Logger.log(`Finished. Saved ${savedCount} images.`);
-
-} catch (e) {
-Logger.log("Error: " + e.message);
-}
+  return card.build();
 }
 
 /**
-* Helper function to find an existing subfolder or create a new one within a parent folder.
-* @param {GoogleAppsScript.Drive.Folder} parentFolder The parent folder.
-* @param {string} subfolderName The name of the subfolder to find or create.
-* @returns {GoogleAppsScript.Drive.Folder} The found or newly created subfolder.
-*/
-function findOrCreateSubfolder(parentFolder, subfolderName) {
-const folders = parentFolder.getFoldersByName(subfolderName);
-if (folders.hasNext()) {
-return folders.next();
-} else {
-return parentFolder.createFolder(subfolderName);
-}
-}
+ * Triggered when the user clicks the "Send to Inbox" button.
+ */
+function processImage(e) {
+  var imageUrl = e.formInput.imageUrl;
 
-/**
-* Run this to clear the "Last Run" memory.
-*/
-function resetLastProcessedDate() {
-PropertiesService.getScriptProperties().deleteProperty('lastProcessedDate');
-Logger.log("Memory reset. Next run will scan all unread emails.");
-}
-/**
-* Saves images and logs: Date, Sender, Subject, Filename, and Link.
-*/
-function saveImagesWithLogging() {
-// --- CONFIGURATION ---
-const SS_ID = "1mV4_7SZidjhlyTTB0U9qxc7M2L7Wi-XsBSOyQNkQeJI";
-const TARGET_FOLDER_NAME = "SavedImages";
-const LAST_PROCESSED_KEY = 'lastProcessedDate';
+  if (!imageUrl) {
+    return createNotification("Please paste a valid URL.");
+  }
 
-try {
-const ss = SpreadsheetApp.openById(SS_ID);
-const configSheet = ss.getSheetByName("Config");
-const logSheet = ss.getSheetByName("Log");
-const properties = PropertiesService.getScriptProperties();
+  try {
+    // Fetch the image from the provided URL
+    var response = UrlFetchApp.fetch(imageUrl);
+    var blob = response.getBlob();
+    
+    // Get the user's own email address
+    var userEmail = Session.getActiveUser().getEmail();
 
-if (!configSheet || !logSheet) {
-throw new Error("Could not find tabs named 'Config' or 'Log'.");
-}
+    // Send the email with the image attached
+    MailApp.sendEmail({
+      to: userEmail,
+      subject: "Image from your Gmail Add-on",
+      body: "Here is the image you requested from: " + imageUrl,
+      attachments: [blob]
+    });
 
-// 1. GetEmails from Config Sheet
-const lastRow = configSheet.getLastRow();
-if (lastRow === 0) return;
+    return createNotification("Success! Image sent to your inbox.");
 
-const emails = configSheet.getRange("A1:A" + lastRow).getValues()
-.flat()
-.filter(email => email && email.includes("@"));
-
-// 2. Setup Main Folder
-const folders = DriveApp.getFoldersByName(TARGET_FOLDER_NAME);
-const mainFolder = folders.hasNext() ? folders.next() : DriveApp.createFolder(TARGET_FOLDER_NAME); // Renamed 'folder' to 'mainFolder'
-
-// 3. Build Search Query
-let lastRun = properties.getProperty(LAST_PROCESSED_KEY);
-let query = `has:attachment (${emails.map(e => `from:${e}`).join(' OR ')})`;
-
-if (lastRun) {
-let formattedDate = Utilities.formatDate(new Date(lastRun), Session.getScriptTimeZone(), 'yyyy/MM/dd');
-query += ` after:${formattedDate}`;
-} else {
-query += ` is:unread`;
-}
-
-// 4. Process Messages
-const threads = GmailApp.search(query);
-let savedCount = 0;
-threads.forEach(thread => {
-const threadId = thread.getId();
-
-const threadSubject = thread.getMessages()[0].getSubject();
-// Sanitize subject for folder name: remove illegal characters, limit length
-Logger.log(threadSubject);
-const sanitizedSubject = threadSubject.replace(/[\\/:*?"<>|]/g, '').substring(0, 100).trim();
-const subfolderName = `${sanitizedSubject || 'No_Subject'}_${threadId}`;
-
-// Get or create the specific subfolder for this thread
-const threadFolder = findOrCreateSubfolder(mainFolder, subfolderName);
-
-thread.getMessages().forEach(message => {
-const sender = message.getFrom().toLowerCase();
-if (!emails.some(e => sender.includes(e.toLowerCase()))) return;
-
-const attachments = message.getAttachments();
-const subject = message.getSubject();
-let index = 1;
-
-attachments.forEach(attachment => {
-if (attachment.getContentType().startsWith('image/')) {
-const timestamp = Utilities.formatDate(message.getDate(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmm');
-const uniqueName = `${timestamp}_${index}_${attachment.getName()}`;
-
-// Check existence and save into the thread-specific subfolder
-if (!threadFolder.getFilesByName(uniqueName).hasNext()) {
-const file = threadFolder.createFile(attachment.setName(uniqueName));
-
-// 5. Log with Subject Line
-logSheet.appendRow([
-new Date(),
-
-message.getFrom(),
-subject,
-uniqueName,
-file.getUrl()
-]);
-
-savedCount++;
-index++;
-}
-}
-});
-message.markRead();
-});
-});
-
-properties.setProperty(LAST_PROCESSED_KEY, new Date().toISOString());
-Logger.log(`Finished. Saved ${savedCount} images.`);
-
-} catch (e) {
-Logger.log("Error: " + e.message);
-}
+  } catch (error) {
+    // If fetching the image or sending the email fails
+    return createNotification("Error: " + error.message);
+  }
 }
 
 /**
-* Helper function to find an existing subfolder or create a new one within a parent folder.
-* @param {GoogleAppsScript.Drive.Folder} parentFolder The parent folder.
-* @param {string} subfolderName The name of the subfolder to find or create.
-* @returns {GoogleAppsScript.Drive.Folder} The found or newly created subfolder.
-*/
-function findOrCreateSubfolder(parentFolder, subfolderName) {
-const folders = parentFolder.getFoldersByName(subfolderName);
-if (folders.hasNext()) {
-return folders.next();
-} else {
-return parentFolder.createFolder(subfolderName);
-}
-}
-
-/**
-* Run this to clear the "Last Run" memory.
-*/
-function resetLastProcessedDate() {
-PropertiesService.getScriptProperties().deleteProperty('lastProcessedDate');
-Logger.log("Memory reset. Next run will scan all unread emails.");
+ * Helper function to show small toast notifications at the bottom of the screen.
+ */
+function createNotification(message) {
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText(message))
+    .build();
 }
