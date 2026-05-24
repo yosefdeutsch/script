@@ -14,12 +14,11 @@ const TEXT = {
     urlHint: "Paste URL or Base64 here...",
     btnInbox: "Send to My Inbox",
     btnOther: "Send to Someone Else",
-    btnLang: "🌐 עברית",
+    btnLang: "🌐 Switch to עברית",
     otherTitle: "Recipient Details",
     emailLabel: "Recipient Email",
     btnSend: "Send Now",
     btnBack: "Go Back",
-    processing: "Processing image...",
     success: "Success! Image sent.",
     error: "Error: ",
     invalidUrl: "Please provide a valid link.",
@@ -32,14 +31,13 @@ const TEXT = {
     subtitle: "שתף תמונות ברגע",
     urlLabel: "קישור לתמונה",
     urlHint: "הדבק קישור או Base64 כאן...",
-    btnInbox: "שלח לתיבת הדואר שלי",
+    btnInbox: "שלח לתיבה שלי",
     btnOther: "שלח לאדם אחר",
-    btnLang: "🌐 English",
+    btnLang: "🌐 Switch to English",
     otherTitle: "פרטי הנמען",
     emailLabel: "אימייל הנמען",
     btnSend: "שלח עכשיו",
     btnBack: "חזור",
-    processing: "מעבד תמונה...",
     success: "הצליח! התמונה נשלחה.",
     error: "שגיאה: ",
     invalidUrl: "אנא ספק קישור תקין.",
@@ -66,7 +64,7 @@ function createMainCard(e) {
   var t = TEXT[lang];
   var card = CardService.newCardBuilder();
 
-  // Visual Header
+  // 1. Visual Header
   var header = CardService.newCardHeader()
     .setTitle(t.title)
     .setSubtitle(t.subtitle)
@@ -74,39 +72,45 @@ function createMainCard(e) {
     .setImageUrl(THEME.icon);
   card.setHeader(header);
 
-  var section = CardService.newCardSection();
-
-  // URL Input
+  // 2. Input Section
+  var inputSection = CardService.newCardSection();
   var urlInput = CardService.newTextInput()
     .setFieldName("imageUrl")
     .setTitle(t.urlLabel)
     .setHint(t.urlHint);
-  section.addWidget(urlInput);
+  inputSection.addWidget(urlInput);
+  card.addSection(inputSection);
 
-  // Send to Self (Primary Action)
+  // 3. Actions Section (Modern Button Group)
+  var actionSection = CardService.newCardSection();
+  var buttonSet = CardService.newButtonSet();
+
   var selfAction = CardService.newAction().setFunctionName("processImage").setParameters({target: "self"});
   var selfBtn = CardService.newTextButton()
     .setText(t.btnInbox)
     .setOnClickAction(selfAction)
     .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
-  section.addWidget(selfBtn);
-
-  // Send to Other (Secondary Action)
+  
   var otherAction = CardService.newAction().setFunctionName("buildOtherCard");
   var otherBtn = CardService.newTextButton()
     .setText(t.btnOther)
     .setOnClickAction(otherAction);
-  section.addWidget(otherBtn);
 
-  // Language Toggle at bottom
+  buttonSet.addButton(selfBtn);
+  buttonSet.addButton(otherBtn);
+  actionSection.addWidget(buttonSet);
+  card.addSection(actionSection);
+
+  // 4. Footer Section (Language Toggle)
+  var footerSection = CardService.newCardSection();
   var langAction = CardService.newAction().setFunctionName("toggleLanguage");
   var langBtn = CardService.newDecoratedText()
     .setText(t.btnLang)
     .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.DESCRIPTION))
     .setOnClickAction(langAction);
-  section.addWidget(langBtn);
+  footerSection.addWidget(langBtn);
+  card.addSection(footerSection);
 
-  card.addSection(section);
   return card.build();
 }
 
@@ -118,31 +122,40 @@ function buildOtherCard(e) {
   var card = CardService.newCardBuilder();
   card.setHeader(CardService.newCardHeader().setTitle(t.otherTitle));
 
-  var section = CardService.newCardSection();
+  var mainSection = CardService.newCardSection();
 
   // Retain the URL
-  section.addWidget(CardService.newTextInput().setFieldName("imageUrl").setTitle(t.urlLabel).setValue(currentUrl));
+  mainSection.addWidget(CardService.newTextInput().setFieldName("imageUrl").setTitle(t.urlLabel).setValue(currentUrl));
 
   // Recipient Input
-  var emailInput = CardService.newTextInput()
+  mainSection.addWidget(CardService.newTextInput()
     .setFieldName("recipientEmail")
     .setTitle(t.emailLabel)
-    .setHint("example@mail.com");
-  section.addWidget(emailInput);
+    .setHint("example@mail.com"));
+  
+  card.addSection(mainSection);
 
-  // Send Button
+  // Actions Section
+  var actionSection = CardService.newCardSection();
+  var buttonSet = CardService.newButtonSet();
+
   var sendAction = CardService.newAction().setFunctionName("processImage").setParameters({target: "other"});
-  section.addWidget(CardService.newTextButton()
+  var sendBtn = CardService.newTextButton()
     .setText(t.btnSend)
     .setOnClickAction(sendAction)
-    .setTextButtonStyle(CardService.TextButtonStyle.FILLED));
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
 
-  // Back Button
-  section.addWidget(CardService.newTextButton()
+  var backAction = CardService.newAction().setFunctionName("goBack");
+  var backBtn = CardService.newTextButton()
     .setText(t.btnBack)
-    .setOnClickAction(CardService.newAction().setFunctionName("goBack")));
+    .setOnClickAction(backAction);
 
-  card.addSection(section);
+  buttonSet.addButton(sendBtn);
+  buttonSet.addButton(backBtn);
+  actionSection.addWidget(buttonSet);
+
+  card.addSection(actionSection);
+
   return CardService.newActionResponseBuilder().setNavigation(CardService.newNavigation().pushCard(card.build())).build();
 }
 
