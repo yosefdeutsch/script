@@ -5,14 +5,21 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     var imageUrl = data.imageUrl;
-
     var blob;
-    if (imageUrl.indexOf("base64,") > -1) {
+
+    // 1. Smarter check for Base64 Data URIs
+    if (imageUrl.startsWith("data:image") && imageUrl.indexOf("base64,") > -1) {
       var parts = imageUrl.split("base64,");
       var mimeType = parts[0].split(":")[1].split(";")[0];
       var decoded = Utilities.base64Decode(parts[1]);
       blob = Utilities.newBlob(decoded, mimeType, "image." + mimeType.split("/")[1]);
-    } else {
+    } 
+    // 2. Catch URLs that are just too massive for Google's servers
+    else if (imageUrl.length > 2048) {
+      throw new Error("This site uses an image link that is too long for Google to process. Please try 'Copy Image Address' manually.");
+    } 
+    // 3. Standard fetch
+    else {
       blob = UrlFetchApp.fetch(imageUrl).getBlob();
     }
 
@@ -30,4 +37,12 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({status: "error", message: err.message}))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+/**
+ * Run this function manually ONE TIME in the editor 
+ * to authorize the script to send emails on your behalf!
+ */
+function setupPermissions() {
+  MailApp.getRemainingDailyQuota();
 }
