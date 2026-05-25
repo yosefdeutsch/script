@@ -1,85 +1,33 @@
-/**
- * Builds the persistent sidebar UI.
- */
-function buildHomepage(e) {
-  var card = CardService.newCardBuilder();
-  card.setHeader(CardService.newCardHeader().setTitle("Save Video to Drive"));
-
-  var section = CardService.newCardSection();
-
-  var urlInput = CardService.newTextInput()
-      .setFieldName("videoUrl")
-      .setTitle("Paste direct video link here (e.g., ends in .mp4)");
-
-  var action = CardService.newAction().setFunctionName("saveVideoToDrive");
-
-  var button = CardService.newTextButton()
-      .setText("Download to Drive")
-      .setOnClickAction(action);
-
-  section.addWidget(urlInput);
-  section.addWidget(button);
-  card.addSection(section);
-
-  return card.build();
-}
-
-/**
- * Triggered when the user clicks the "Download" button.
- */
-function saveVideoToDrive(e) {
-  var originalUrl = e.formInput.videoUrl;
-
-  if (!originalUrl) {
-    return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("Please enter a URL first."))
-        .build();
-  }
-
+function doPost(e) {
+  // Put YOUR actual email address here
+  var myEmail = "yosefadeutsch@gmail.com"; 
+  
   try {
-    // 1. Send the link to the free Cobalt API to extract the raw video
-    var cobaltEndpoint = "https://api.cobalt.tools/";
-    
-    var payload = {
-      "url": originalUrl
-    };
+    var data = JSON.parse(e.postData.contents);
+    var imageUrl = data.imageUrl;
 
-    var options = {
-      "method": "post",
-      "contentType": "application/json",
-      "headers": {
-        "Accept": "application/json"
-      },
-      "payload": JSON.stringify(payload),
-      "muteHttpExceptions": true // Allows us to read error messages if it fails
-    };
-
-    var response = UrlFetchApp.fetch(cobaltEndpoint, options);
-    var json = JSON.parse(response.getContentText());
-
-    // Check if Cobalt successfully found the video
-    if (json.status === "error") {
-       return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("Cobalt Error: " + json.text))
-        .build();
+    var blob;
+    if (imageUrl.indexOf("base64,") > -1) {
+      var parts = imageUrl.split("base64,");
+      var mimeType = parts[0].split(":")[1].split(";")[0];
+      var decoded = Utilities.base64Decode(parts[1]);
+      blob = Utilities.newBlob(decoded, mimeType, "image." + mimeType.split("/")[1]);
+    } else {
+      blob = UrlFetchApp.fetch(imageUrl).getBlob();
     }
 
-    // 2. Cobalt gives us a direct download URL (json.url). Let's fetch the actual video file.
-    var videoDownloadUrl = json.url;
-    var videoResponse = UrlFetchApp.fetch(videoDownloadUrl);
-    var blob = videoResponse.getBlob();
+    MailApp.sendEmail({
+      to: myEmail,
+      subject: "Image from Chrome Extension",
+      body: "Here is the image you sent from the web.",
+      attachments: [blob]
+    });
 
-    // 3. Save it to the root of the user's Google Drive
-    var file = DriveApp.createFile(blob);
+    return ContentService.createTextOutput(JSON.stringify({status: "success"}))
+      .setMimeType(ContentService.MimeType.JSON);
 
-    // 4. Show a success message
-    return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("Success! Saved to Drive: " + file.getName()))
-        .build();
-
-  } catch (error) {
-    return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("Failed: " + error.message))
-        .build();
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({status: "error", message: err.message}))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
