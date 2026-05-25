@@ -1,140 +1,261 @@
-var SHEET_ID = '1JXRpPablVJQll5_RvLXBhk_HKUej6aGy1kfBtYxZluc'; // <--- PUT YOUR ID HERE
+// ============================================================
+//  Gmail Action Extractor — Code.gs
+//  Powered by Gemini API (FREE — 1,500 requests/day)
+// ============================================================
 
-function buildComposeUI(e) {
+// ▸ STEP 1: Get your FREE key at https://aistudio.google.com/apikey
+//   No credit card required. Takes 30 seconds.
+var GEMINI_API_KEY = "AIzaSyBX22WIRGIzV5T-xcdPFh4rj1E5tVyLoII";
+
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=";
+
+
+// ------------------------------------------------------------
+//  ADD-ON ENTRY POINT
+//  Called by Gmail every time the user opens an email
+// ------------------------------------------------------------
+function onGmailMessage(e) {
+  var accessToken = e.messageMetadata.accessToken;
+  var messageId   = e.messageMetadata.messageId;
+
+  GmailApp.setCurrentMessageAccessToken(accessToken);
+  var message = GmailApp.getMessageById(messageId);
+
+  if (!message) {
+    return buildErrorCard("Could not load this email.");
+  }
+
+  var emailBody    = message.getPlainBody().slice(0, 4000);
+  var emailSubject = message.getSubject();
+  var emailFrom    = message.getFrom();
+
+  var extraction = extractActions(emailSubject, emailFrom, emailBody);
+
+  if (extraction.error) {
+    return buildErrorCard(extraction.error);
+  }
+
+  return buildResultCard(extraction);
+}
+
+
+// ------------------------------------------------------------
+//  GEMINI API CALL
+// ------------------------------------------------------------
+function extractActions(subject, from, body) {
+  var prompt = buildPrompt(subject, from, body);
+
+  var payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }
+  };
+
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(GEMINI_URL + GEMINI_API_KEY, options);
+    var json     = JSON.parse(response.getContentText());
+
+    if (json.error) {
+      return { error: "API error: " + json.error.message };
+    }
+
+    var rawText = json.candidates[0].content.parts[0].text;
+    rawText = rawText.replace(/```json|```/g, "").trim();
+
+    return JSON.parse(rawText);
+
+  } catch (err) {
+    return { error: "Failed to parse response: " + err.message };
+  }
+}
+
+
+// ------------------------------------------------------------
+//  PROMPT BUILDER
+// ------------------------------------------------------------
+function buildPrompt(subject, from, body) {
+  return [
+    "You are an email analysis assistant. Analyze the email below and extract action items.",
+    "Return ONLY a valid JSON object — no markdown, no explanation, no preamble.",
+    "",
+    "The JSON must follow this exact structure:",
+    "{",
+    '  "tasks": [{ "text": "short action description", "priority": "high|medium|low" }],',
+    '  "deadlines": [{ "text": "what is due", "when": "human-readable date or day", "urgent": true|false }],',
+    '  "questions": [{ "text": "question asked of the recipient", "suggestedReplies": ["Yes", "No"] }],',
+    '  "summary": "one sentence summary of the email"',
+    "}",
+    "",
+    "Rules:",
+    "- tasks: things the recipient is asked to DO",
+    "- deadlines: explicit or implied time constraints",
+    "- questions: direct questions requiring a reply",
+    "- suggestedReplies: 2-3 short sensible options",
+    "- Empty category = empty array []",
+    "- Max 10 words per item",
+    "",
+    "--- EMAIL ---",
+    "From: " + from,
+    "Subject: " + subject,
+    "",
+    body
+  ].join("\n");
+}
+
+
+// ------------------------------------------------------------
+//  CARD BUILDERS
+// ------------------------------------------------------------
+function buildResultCard(data) {
   var card = CardService.newCardBuilder();
-  
-  // THE CONTEXT DETECTIVE: Read the draft subject
-  var subject = "";
-  if (e.gmail && e.gmail.draftMetadata && e.gmail.draftMetadata.subject) {
-    subject = e.gmail.draftMetadata.subject.toLowerCase();
+  card.setHeader(
+    CardService.newCardHeader()
+      .setTitle("⚡ Action Extractor")
+      .setSubtitle(data.summary || "Analysis complete")
+  );
+
+  // Tasks
+  if (data.tasks && data.tasks.length > 0) {
+    var taskSection = CardService.newCardSection().setHeader("✅ Tasks");
+    data.tasks.forEach(function(task) {
+      var icon = task.priority === "high" ? "🔴 " : task.priority === "medium" ? "🟡 " : "🟢 ";
+      taskSection.addWidget(
+        CardService.newDecoratedText()
+          .setText(icon + task.text)
+          .setButton(
+            CardService.newTextButton()
+              .setText("Add task")
+              .setOnClickAction(
+                CardService.newAction()
+                  .setFunctionName("onAddTask")
+                  .setParameters({ taskText: task.text })
+              )
+          )
+      );
+    });
+    card.addSection(taskSection);
   }
 
-  // --- FEATURE 1: SMART CALENDAR ---
-  var calSection = CardService.newCardSection().setHeader("📅 Smart Actions");
-  calSection.addWidget(CardService.newTextButton()
-    .setText("Insert My Free Time (Next 3 Days)")
-    .setOnClickAction(CardService.newAction().setFunctionName("insertCalendarSlots")));
-  card.addSection(calSection);
-
-  // --- READ THE DATABASE ---
-  var sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
-  var data = sheet.getDataRange().getValues();
-
-  var contextSection = CardService.newCardSection().setHeader("🎯 Suggested for this Email");
-  var allSection = CardService.newCardSection().setHeader("🗄️ All Snippets & Files");
-  var hasSuggestions = false;
-
-  for (var i = 1; i < data.length; i++) {
-    var name = data[i][0];
-    var text = data[i][1];
-    var driveId = data[i][2];
-    var keywords = data[i][3] ? data[i][3].toString().toLowerCase() : "";
-
-    if (!name) continue;
-
-    // Build the action for this button
-    var action = CardService.newAction()
-      .setFunctionName("insertVaultSnippet")
-      .setParameters({ "text": text || "", "driveId": driveId || "" });
-
-    var button = CardService.newTextButton().setText(name).setOnClickAction(action);
-    
-    // Check if keywords match the email subject
-    var isMatch = false;
-    if (keywords && subject) {
-       var kwArray = keywords.split(",");
-       for (var k = 0; k < kwArray.length; k++) {
-         if (subject.indexOf(kwArray[k].trim()) > -1) {
-            isMatch = true;
-            break;
-         }
-       }
-    }
-
-    if (isMatch) {
-       contextSection.addWidget(button);
-       hasSuggestions = true;
-    }
-    allSection.addWidget(button);
+  // Deadlines
+  if (data.deadlines && data.deadlines.length > 0) {
+    var dlSection = CardService.newCardSection().setHeader("🗓️ Deadlines");
+    data.deadlines.forEach(function(dl) {
+      dlSection.addWidget(
+        CardService.newDecoratedText()
+          .setText((dl.urgent ? "⚠️ " : "") + dl.text + " — " + dl.when)
+          .setButton(
+            CardService.newTextButton()
+              .setText("Add to calendar")
+              .setOnClickAction(
+                CardService.newAction()
+                  .setFunctionName("onAddToCalendar")
+                  .setParameters({ deadlineText: dl.text, deadlineWhen: dl.when })
+              )
+          )
+      );
+    });
+    card.addSection(dlSection);
   }
 
-  if (hasSuggestions) card.addSection(contextSection);
-  card.addSection(allSection);
-
-  return [card.build()];
-}
-
-/**
- * FEATURE 2: THE VAULT (Inserts Text + Drive Links)
- */
-function insertVaultSnippet(e) {
-  var text = e.parameters.text;
-  var driveId = e.parameters.driveId;
-  var finalHtml = text + "<br><br>";
-  
-  if (driveId) {
-     try {
-       var file = DriveApp.getFileById(driveId);
-       var url = file.getUrl();
-       var name = file.getName();
-       finalHtml += "📁 <b>Attached Document:</b> <a href='" + url + "'>" + name + "</a><br>";
-     } catch (err) {
-       finalHtml += "<i>(⚠️ Could not fetch Drive file. Please check the ID in your Sheet.)</i>";
-     }
-  }
-
-  return CardService.newUpdateDraftActionResponseBuilder()
-    .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
-      .addUpdateContent(finalHtml, CardService.ContentType.MUTABLE_HTML)
-      .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
-    .build();
-}
-
-/**
- * FEATURE 3: SMART CALENDAR ALGORITHM
- */
-function insertCalendarSlots(e) {
-  var cal = CalendarApp.getDefaultCalendar();
-  var now = new Date();
-  var html = "Here are a few times I am available over the coming days:<ul>";
-  var slotsFound = 0;
-
-  // Look ahead up to 4 days, max 4 slots
-  for (var d = 1; d <= 4 && slotsFound < 4; d++) { 
-    var date = new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
-    if (date.getDay() === 6 || date.getDay() === 0) continue; // Skip weekends
-    
-    var workStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 9, 0, 0); // 9 AM
-    var workEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 17, 0, 0);  // 5 PM
-    
-    var events = cal.getEvents(workStart, workEnd);
-    var currentCheck = workStart;
-    
-    for (var i = 0; i < events.length; i++) {
-      var evStart = events[i].getStartTime();
-      var evEnd = events[i].getEndTime();
-      
-      // If there is at least a 1-hour gap
-      if (evStart.getTime() - currentCheck.getTime() >= 60 * 60 * 1000) {
-         html += "<li>" + date.toDateString() + " at " + currentCheck.getHours() + ":00</li>";
-         slotsFound++;
+  // Questions
+  if (data.questions && data.questions.length > 0) {
+    var qSection = CardService.newCardSection().setHeader("❓ Questions for you");
+    data.questions.forEach(function(q) {
+      qSection.addWidget(CardService.newTextParagraph().setText(q.text));
+      if (q.suggestedReplies && q.suggestedReplies.length > 0) {
+        var btnSet = CardService.newButtonSet();
+        q.suggestedReplies.forEach(function(reply) {
+          btnSet.addButton(
+            CardService.newTextButton()
+              .setText(reply)
+              .setOnClickAction(
+                CardService.newAction()
+                  .setFunctionName("onQuickReply")
+                  .setParameters({ replyText: reply, question: q.text })
+              )
+          );
+        });
+        qSection.addWidget(btnSet);
       }
-      if (evEnd > currentCheck) currentCheck = evEnd;
-    }
-    
-    // Check for a gap after the last event of the day
-    if (workEnd.getTime() - currentCheck.getTime() >= 60 * 60 * 1000 && slotsFound < 4) {
-       html += "<li>" + date.toDateString() + " at " + currentCheck.getHours() + ":00</li>";
-       slotsFound++;
-    }
+    });
+    card.addSection(qSection);
   }
-  
-  if (slotsFound === 0) html += "<li><i>My calendar is booked solid for the next few days. Please suggest a time!</i></li>";
-  html += "</ul>";
 
-  return CardService.newUpdateDraftActionResponseBuilder()
-    .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
-      .addUpdateContent(html, CardService.ContentType.MUTABLE_HTML)
-      .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
+  // Empty state
+  if (
+    (!data.tasks || data.tasks.length === 0) &&
+    (!data.deadlines || data.deadlines.length === 0) &&
+    (!data.questions || data.questions.length === 0)
+  ) {
+    card.addSection(
+      CardService.newCardSection().addWidget(
+        CardService.newTextParagraph().setText("No action items found in this email.")
+      )
+    );
+  }
+
+  return card.build();
+}
+
+function buildErrorCard(message) {
+  return CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle("⚡ Action Extractor"))
+    .addSection(
+      CardService.newCardSection().addWidget(
+        CardService.newTextParagraph().setText("⚠️ " + message)
+      )
+    )
     .build();
+}
+
+
+// ------------------------------------------------------------
+//  ACTION HANDLERS
+// ------------------------------------------------------------
+function onAddTask(e) {
+  var taskText = e.parameters.taskText;
+  try {
+    Tasks.Tasks.insert({ title: taskText, notes: "Added by Action Extractor" }, "@default");
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("✅ Task added: " + taskText))
+      .build();
+  } catch (err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("Enable Tasks API in Services first."))
+      .build();
+  }
+}
+
+function onAddToCalendar(e) {
+  var calUrl = "https://calendar.google.com/calendar/r/eventedit?text=" +
+    encodeURIComponent(e.parameters.deadlineText) +
+    "&details=" + encodeURIComponent("Deadline: " + e.parameters.deadlineWhen);
+  return CardService.newActionResponseBuilder()
+    .setOpenLink(CardService.newOpenLink().setUrl(calUrl))
+    .build();
+}
+
+function onQuickReply(e) {
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText("Reply: " + e.parameters.replyText))
+    .build();
+}
+
+
+// ------------------------------------------------------------
+//  TEST FUNCTION — run this first to verify everything works
+// ------------------------------------------------------------
+function testExtraction() {
+  var result = extractActions(
+    "Q3 campaign updates",
+    "sarah@example.com",
+    "Can you send the design files? The proposal is due Friday EOD. Are you joining the kickoff call Thursday at 3pm?"
+  );
+  Logger.log(JSON.stringify(result, null, 2));
 }
