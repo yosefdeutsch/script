@@ -1,10 +1,47 @@
 // ============================================================
-//  Gmail Action Extractor — Ultimate Edition
+//  Gmail Action Extractor — Ultimate Edition v2
 //  Pure Apps Script, no external APIs, completely free
 // ============================================================
 
 // ------------------------------------------------------------
-//  ENTRY POINT
+//  HOMEPAGE — shown when not inside an email
+// ------------------------------------------------------------
+function onGmailHomepage(e) {
+  return buildHomepageCard();
+}
+
+function buildHomepageCard() {
+  var card = CardService.newCardBuilder();
+  card.setHeader(
+    CardService.newCardHeader()
+      .setTitle("⚡ Action Extractor")
+      .setSubtitle("Open any email to get started")
+  );
+
+  var section = CardService.newCardSection();
+  section.addWidget(
+    CardService.newImage()
+      .setImageUrl("https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/bolt/default/48px.svg")
+      .setAltText("Action Extractor")
+  );
+  section.addWidget(
+    CardService.newTextParagraph().setText(
+      "<b>What I do:</b><br>" +
+      "✅ Extract tasks you need to action<br>" +
+      "⏰ Spot deadlines & urgent items<br>" +
+      "❓ Surface questions directed at you<br>" +
+      "🚨 Flag important alerts<br>" +
+      "🔔 Detect follow-ups needed<br><br>" +
+      "👆 <b>Open any email</b> and I'll analyze it automatically."
+    )
+  );
+  card.addSection(section);
+  return card.build();
+}
+
+
+// ------------------------------------------------------------
+//  ENTRY POINT — called when user opens an email
 // ------------------------------------------------------------
 function onGmailMessage(e) {
   var accessToken = e.messageMetadata.accessToken;
@@ -15,20 +52,18 @@ function onGmailMessage(e) {
 
   if (!message) return buildErrorCard("Could not load this email.");
 
-  var body    = message.getPlainBody();
-  var subject = message.getSubject();
-  var from    = message.getFrom();
-  var date    = message.getDate();
-  var thread  = message.getThread();
+  var body        = message.getPlainBody();
+  var subject     = message.getSubject();
+  var from        = message.getFrom();
+  var date        = message.getDate();
+  var thread      = message.getThread();
   var threadCount = thread ? thread.getMessageCount() : 1;
 
-  var data = extractActions(body);
+  var data        = extractActions(body);
   data.subject     = subject;
   data.from        = from;
   data.date        = date;
   data.threadCount = threadCount;
-  data.messageId   = messageId;
-  data.body        = body;
 
   return buildResultCard(data);
 }
@@ -40,21 +75,15 @@ function onGmailMessage(e) {
 function extractActions(body) {
   var lines = body.split(/\n/).map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 5; });
 
-  var taskKeywords     = ["please", "can you", "could you", "would you", "need you to", "make sure", "don't forget", "send", "review", "complete", "submit", "update", "check", "confirm", "prepare", "schedule", "kindly", "ensure", "attach", "forward", "fill", "sign", "approve", "follow up", "look into", "handle", "arrange"];
-  var deadlineKeywords = ["by ", "due", "deadline", "eod", "end of day", "asap", "urgent", "today", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "next week", "this week", "by end", "no later", "midnight", "noon", "morning", "afternoon"];
-  var importantKeywords= ["important", "critical", "urgent", "high priority", "action required", "action needed", "required", "mandatory", "must", "immediately", "right away", "as soon as possible"];
-  var followUpKeywords = ["let me know", "get back to me", "waiting for", "looking forward", "keep me posted", "update me", "ping me", "reach out"];
+  var taskKeywords      = ["please", "can you", "could you", "would you", "need you to", "make sure", "don't forget", "send", "review", "complete", "submit", "update", "check", "confirm", "prepare", "schedule", "kindly", "ensure", "attach", "forward", "fill", "sign", "approve", "follow up", "look into", "handle", "arrange"];
+  var deadlineKeywords  = ["by ", "due", "deadline", "eod", "end of day", "asap", "urgent", "today", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "next week", "this week", "by end", "no later", "midnight", "noon"];
+  var importantKeywords = ["important", "critical", "urgent", "high priority", "action required", "action needed", "required", "mandatory", "must", "immediately", "right away"];
+  var followUpKeywords  = ["let me know", "get back to me", "waiting for", "looking forward", "keep me posted", "update me", "ping me", "reach out"];
 
-  var tasks     = [];
-  var deadlines = [];
-  var questions = [];
-  var important = [];
-  var followUps = [];
+  var tasks = [], deadlines = [], questions = [], important = [], followUps = [];
 
   lines.forEach(function(line) {
     var lower = line.toLowerCase();
-
-    // Skip greetings/sign-offs
     if (lower.match(/^(hi|hey|hello|dear|thanks|thank you|regards|best|cheers|sincerely|warm)/)) return;
     if (line.length < 15) return;
 
@@ -64,32 +93,21 @@ function extractActions(body) {
     var isImportant = importantKeywords.some(function(k) { return lower.indexOf(k) !== -1; });
     var isFollowUp  = followUpKeywords.some(function(k) { return lower.indexOf(k) !== -1; });
 
-    if (isQuestion) {
-      questions.push(line);
-    } else if (isImportant) {
-      important.push(line);
-    } else if (isDeadline) {
-      var urgent = lower.indexOf("asap") !== -1 || lower.indexOf("urgent") !== -1 ||
-                   lower.indexOf("today") !== -1 || lower.indexOf("eod") !== -1 ||
-                   lower.indexOf("immediately") !== -1;
+    if (isQuestion)       questions.push(line);
+    else if (isImportant) important.push(line);
+    else if (isDeadline) {
+      var urgent = ["asap","urgent","today","eod","immediately"].some(function(k){ return lower.indexOf(k) !== -1; });
       deadlines.push({ text: line, urgent: urgent });
-    } else if (isFollowUp) {
-      followUps.push(line);
-    } else if (isTask) {
-      tasks.push(line);
     }
+    else if (isFollowUp) followUps.push(line);
+    else if (isTask)     tasks.push(line);
   });
 
-  // Sentiment: detect if email is positive, neutral, or needs attention
   var lowerBody = body.toLowerCase();
   var sentiment = "neutral";
-  if (lowerBody.indexOf("urgent") !== -1 || lowerBody.indexOf("asap") !== -1 || lowerBody.indexOf("immediately") !== -1) {
-    sentiment = "urgent";
-  } else if (lowerBody.indexOf("thank") !== -1 || lowerBody.indexOf("great job") !== -1 || lowerBody.indexOf("well done") !== -1) {
-    sentiment = "positive";
-  }
+  if (["urgent","asap","immediately"].some(function(k){ return lowerBody.indexOf(k) !== -1; })) sentiment = "urgent";
+  else if (["thank","great job","well done"].some(function(k){ return lowerBody.indexOf(k) !== -1; })) sentiment = "positive";
 
-  // Word count & read time
   var wordCount = body.split(/\s+/).filter(Boolean).length;
   var readTime  = Math.max(1, Math.round(wordCount / 200));
 
@@ -107,14 +125,12 @@ function extractActions(body) {
 
 
 // ------------------------------------------------------------
-//  CARD BUILDER — Ultimate layout
+//  CARD BUILDER
 // ------------------------------------------------------------
 function buildResultCard(data) {
   var card = CardService.newCardBuilder();
 
-  // ── Header with sender info ──
-  var fromName = data.from.replace(/<.*>/, "").trim() || data.from;
-  var dateStr  = data.date ? Utilities.formatDate(data.date, Session.getScriptTimeZone(), "MMM d, h:mm a") : "";
+  var fromName = data.from.replace(/<.*>/, "").replace(/"/g, "").trim() || data.from;
   var sentimentIcon = data.sentiment === "urgent" ? "🔴 Urgent" : data.sentiment === "positive" ? "🟢 Positive" : "🔵 Info";
 
   card.setHeader(
@@ -123,33 +139,20 @@ function buildResultCard(data) {
       .setSubtitle("From: " + fromName)
   );
 
-  // ── Stats bar ──
+  // Stats
   var statsSection = CardService.newCardSection();
   statsSection.addWidget(
     CardService.newDecoratedText()
-      .setTopLabel("Email stats")
-      .setText(sentimentIcon + "  •  " + data.wordCount + " words  •  ~" + data.readTime + " min read  •  " + data.threadCount + " message" + (data.threadCount > 1 ? "s" : "") + " in thread")
+      .setTopLabel("Overview")
+      .setText(sentimentIcon + "  •  " + data.wordCount + " words  •  ~" + data.readTime + " min  •  " + data.threadCount + (data.threadCount > 1 ? " messages" : " message"))
       .setWrapText(true)
   );
 
-  // Quick action buttons row
+  // Quick actions — open OVERLAY (no new tab)
   var quickBtns = CardService.newButtonSet();
   quickBtns.addButton(
     CardService.newTextButton()
-      .setText("📋 Copy all")
-      .setOnClickAction(
-        CardService.newAction()
-          .setFunctionName("onCopyAll")
-          .setParameters({
-            tasks:     JSON.stringify(data.tasks),
-            deadlines: JSON.stringify(data.deadlines.map(function(d) { return d.text; })),
-            questions: JSON.stringify(data.questions)
-          })
-      )
-  );
-  quickBtns.addButton(
-    CardService.newTextButton()
-      .setText("✉️ Quick reply")
+      .setText("✉️ Reply")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onQuickReply")
@@ -158,33 +161,43 @@ function buildResultCard(data) {
   );
   quickBtns.addButton(
     CardService.newTextButton()
-      .setText("🗓️ Schedule")
+      .setText("🗓️ Meeting")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onScheduleMeeting")
           .setParameters({ from: data.from, subject: data.subject || "" })
       )
   );
+  quickBtns.addButton(
+    CardService.newTextButton()
+      .setText("📋 Summary")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("onShowSummary")
+          .setParameters({
+            tasks:     JSON.stringify(data.tasks),
+            deadlines: JSON.stringify(data.deadlines.map(function(d){ return d.text; })),
+            questions: JSON.stringify(data.questions),
+            followUps: JSON.stringify(data.followUps)
+          })
+      )
+  );
   statsSection.addWidget(quickBtns);
   card.addSection(statsSection);
 
-  // ── Important alerts ──
+  // Important
   if (data.important.length > 0) {
     var impSection = CardService.newCardSection().setHeader("🚨 Important");
     data.important.forEach(function(item) {
-      impSection.addWidget(
-        CardService.newDecoratedText()
-          .setText(item)
-          .setWrapText(true)
-      );
+      impSection.addWidget(CardService.newDecoratedText().setText(item).setWrapText(true));
     });
     card.addSection(impSection);
   }
 
-  // ── Tasks ──
+  // Tasks
   if (data.tasks.length > 0) {
     var taskSection = CardService.newCardSection().setHeader("✅ Tasks for you");
-    data.tasks.forEach(function(task, i) {
+    data.tasks.forEach(function(task) {
       taskSection.addWidget(
         CardService.newDecoratedText()
           .setText(task)
@@ -203,7 +216,7 @@ function buildResultCard(data) {
     card.addSection(taskSection);
   }
 
-  // ── Deadlines ──
+  // Deadlines
   if (data.deadlines.length > 0) {
     var dlSection = CardService.newCardSection().setHeader("⏰ Deadlines");
     data.deadlines.forEach(function(dl) {
@@ -225,10 +238,11 @@ function buildResultCard(data) {
     card.addSection(dlSection);
   }
 
-  // ── Questions ──
+  // Questions
   if (data.questions.length > 0) {
     var qSection = CardService.newCardSection().setHeader("❓ Questions for you");
     data.questions.forEach(function(q) {
+      qSection.addWidget(CardService.newDecoratedText().setText(q).setWrapText(true));
       var btnSet = CardService.newButtonSet();
       btnSet.addButton(
         CardService.newTextButton()
@@ -236,7 +250,7 @@ function buildResultCard(data) {
           .setOnClickAction(
             CardService.newAction()
               .setFunctionName("onSendReply")
-              .setParameters({ from: data.from, subject: data.subject || "", replyText: "Yes, " + q })
+              .setParameters({ from: data.from, subject: data.subject || "", replyText: "Yes — regarding your question: \"" + q.slice(0,80) + "\"" })
           )
       );
       btnSet.addButton(
@@ -245,27 +259,26 @@ function buildResultCard(data) {
           .setOnClickAction(
             CardService.newAction()
               .setFunctionName("onSendReply")
-              .setParameters({ from: data.from, subject: data.subject || "", replyText: "No, " + q })
+              .setParameters({ from: data.from, subject: data.subject || "", replyText: "No — regarding your question: \"" + q.slice(0,80) + "\"" })
           )
       );
       btnSet.addButton(
         CardService.newTextButton()
-          .setText("✏️ Reply")
+          .setText("✏️ Custom")
           .setOnClickAction(
             CardService.newAction()
               .setFunctionName("onQuickReply")
               .setParameters({ from: data.from, subject: data.subject || "" })
           )
       );
-      qSection.addWidget(CardService.newDecoratedText().setText(q).setWrapText(true));
       qSection.addWidget(btnSet);
     });
     card.addSection(qSection);
   }
 
-  // ── Follow-ups ──
+  // Follow-ups
   if (data.followUps.length > 0) {
-    var fuSection = CardService.newCardSection().setHeader("🔔 Follow-ups needed");
+    var fuSection = CardService.newCardSection().setHeader("🔔 Follow-ups");
     data.followUps.forEach(function(fu) {
       fuSection.addWidget(
         CardService.newDecoratedText()
@@ -285,7 +298,7 @@ function buildResultCard(data) {
     card.addSection(fuSection);
   }
 
-  // ── Empty state ──
+  // Empty state
   if (data.tasks.length === 0 && data.deadlines.length === 0 &&
       data.questions.length === 0 && data.important.length === 0 && data.followUps.length === 0) {
     card.addSection(
@@ -314,33 +327,46 @@ function buildErrorCard(msg) {
 //  ACTION HANDLERS
 // ------------------------------------------------------------
 function onAddToCalendar(e) {
-  var url = "https://calendar.google.com/calendar/r/eventedit?text=" +
-    encodeURIComponent(e.parameters.text);
+  var url = "https://calendar.google.com/calendar/r/eventedit?text=" + encodeURIComponent(e.parameters.text);
   return CardService.newActionResponseBuilder()
-    .setOpenLink(CardService.newOpenLink().setUrl(url))
+    .setOpenLink(
+      CardService.newOpenLink()
+        .setUrl(url)
+        .setOpenAs(CardService.OpenAs.OVERLAY)
+        .setOnClose(CardService.OnClose.NOTHING)
+    )
     .build();
 }
 
 function onQuickReply(e) {
   var subject = e.parameters.subject || "";
-  var re = subject.toLowerCase().indexOf("re:") === 0 ? subject : "Re: " + subject;
+  var re = subject.toLowerCase().startsWith("re:") ? subject : "Re: " + subject;
   var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" +
-    encodeURIComponent(e.parameters.from) +
-    "&su=" + encodeURIComponent(re);
+    encodeURIComponent(e.parameters.from) + "&su=" + encodeURIComponent(re);
   return CardService.newActionResponseBuilder()
-    .setOpenLink(CardService.newOpenLink().setUrl(url))
+    .setOpenLink(
+      CardService.newOpenLink()
+        .setUrl(url)
+        .setOpenAs(CardService.OpenAs.OVERLAY)
+        .setOnClose(CardService.OnClose.NOTHING)
+    )
     .build();
 }
 
 function onSendReply(e) {
   var subject = e.parameters.subject || "";
-  var re = subject.toLowerCase().indexOf("re:") === 0 ? subject : "Re: " + subject;
+  var re = subject.toLowerCase().startsWith("re:") ? subject : "Re: " + subject;
   var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" +
     encodeURIComponent(e.parameters.from) +
     "&su=" + encodeURIComponent(re) +
     "&body=" + encodeURIComponent(e.parameters.replyText);
   return CardService.newActionResponseBuilder()
-    .setOpenLink(CardService.newOpenLink().setUrl(url))
+    .setOpenLink(
+      CardService.newOpenLink()
+        .setUrl(url)
+        .setOpenAs(CardService.OpenAs.OVERLAY)
+        .setOnClose(CardService.OnClose.NOTHING)
+    )
     .build();
 }
 
@@ -349,7 +375,12 @@ function onScheduleMeeting(e) {
     encodeURIComponent("Meeting: " + e.parameters.subject) +
     "&add=" + encodeURIComponent(e.parameters.from);
   return CardService.newActionResponseBuilder()
-    .setOpenLink(CardService.newOpenLink().setUrl(url))
+    .setOpenLink(
+      CardService.newOpenLink()
+        .setUrl(url)
+        .setOpenAs(CardService.OpenAs.OVERLAY)
+        .setOnClose(CardService.OnClose.NOTHING)
+    )
     .build();
 }
 
@@ -357,25 +388,37 @@ function onSetReminder(e) {
   var url = "https://calendar.google.com/calendar/r/eventedit?text=" +
     encodeURIComponent("🔔 Follow up: " + e.parameters.text);
   return CardService.newActionResponseBuilder()
-    .setOpenLink(CardService.newOpenLink().setUrl(url))
+    .setOpenLink(
+      CardService.newOpenLink()
+        .setUrl(url)
+        .setOpenAs(CardService.OpenAs.OVERLAY)
+        .setOnClose(CardService.OnClose.NOTHING)
+    )
     .build();
 }
 
-function onCopyAll(e) {
+function onShowSummary(e) {
   var tasks     = JSON.parse(e.parameters.tasks     || "[]");
   var deadlines = JSON.parse(e.parameters.deadlines || "[]");
   var questions = JSON.parse(e.parameters.questions || "[]");
+  var followUps = JSON.parse(e.parameters.followUps || "[]");
 
-  var parts = [];
-  if (tasks.length)     parts.push("TASKS:\n"     + tasks.map(function(t,i){ return (i+1)+". "+t; }).join("\n"));
-  if (deadlines.length) parts.push("DEADLINES:\n" + deadlines.map(function(t,i){ return (i+1)+". "+t; }).join("\n"));
-  if (questions.length) parts.push("QUESTIONS:\n" + questions.map(function(t,i){ return (i+1)+". "+t; }).join("\n"));
+  var card = CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle("📋 Full Summary"));
 
-  var summary = parts.join("\n\n") || "No action items found.";
+  var section = CardService.newCardSection();
+  var text = "";
+  if (tasks.length)     text += "✅ TASKS\n"     + tasks.map(function(t,i){ return (i+1)+". "+t; }).join("\n") + "\n\n";
+  if (deadlines.length) text += "⏰ DEADLINES\n" + deadlines.map(function(t,i){ return (i+1)+". "+t; }).join("\n") + "\n\n";
+  if (questions.length) text += "❓ QUESTIONS\n" + questions.map(function(t,i){ return (i+1)+". "+t; }).join("\n") + "\n\n";
+  if (followUps.length) text += "🔔 FOLLOW-UPS\n"+ followUps.map(function(t,i){ return (i+1)+". "+t; }).join("\n");
+  if (!text) text = "No action items found in this email.";
 
-  // Show in a notification (clipboard not available in Apps Script — open a URL to display)
+  section.addWidget(CardService.newTextParagraph().setText(text));
+  card.addSection(section);
+
   return CardService.newActionResponseBuilder()
-    .setNotification(CardService.newNotification().setText("Copied! " + (tasks.length + deadlines.length + questions.length) + " items found."))
+    .setNavigation(CardService.newNavigation().pushCard(card.build()))
     .build();
 }
 

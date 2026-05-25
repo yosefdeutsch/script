@@ -12,10 +12,13 @@
       "name": "Action Extractor",
       "logoUrl": "https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/bolt/default/48px.svg",
       "homepageTrigger": {
-        "runFunction": "onGmailMessage"
+        "runFunction": "onGmailHomepage"
       }
     },
     "gmail": {
+      "homepageTrigger": {
+        "runFunction": "onGmailHomepage"
+      },
       "contextualTriggers": [
         {
           "unconditional": {},
