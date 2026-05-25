@@ -7,8 +7,7 @@
 //   No credit card required. Takes 30 seconds.
 var GEMINI_API_KEY = "AIzaSyBX22WIRGIzV5T-xcdPFh4rj1E5tVyLoII";
 
-var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=";
-
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
 
 // ------------------------------------------------------------
 //  ADD-ON ENTRY POINT
