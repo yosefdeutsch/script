@@ -44,5 +44,9 @@ function doPost(e) {
  * to authorize the script to send emails on your behalf!
  */
 function setupPermissions() {
+  // Triggers the email permission prompt
   MailApp.getRemainingDailyQuota();
+  
+  // Triggers the external request permission prompt
+  UrlFetchApp.fetch("https://www.google.com"); 
 }
