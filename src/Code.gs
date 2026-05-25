@@ -259,3 +259,7 @@ function testExtraction() {
   );
   Logger.log(JSON.stringify(result, null, 2));
 }
+function requestAuth() {
+  var authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+  Logger.log(authInfo.getAuthorizationUrl());
+}
