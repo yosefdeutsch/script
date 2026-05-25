@@ -5,9 +5,10 @@
 
 // ▸ STEP 1: Get your FREE key at https://aistudio.google.com/apikey
 //   No credit card required. Takes 30 seconds.
-var GEMINI_API_KEY = "AIzaSyDBpRMvoSxFo4DQLoxigucqY69THOd_L6c";
+var GEMINI_API_KEY = "AIzaSyBmOK1zuwcuez3ovOUqhZ5yS2zITTSwQgc";
 
-var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=";
+
 
 // ------------------------------------------------------------
 //  ADD-ON ENTRY POINT
