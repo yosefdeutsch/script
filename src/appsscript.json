@@ -1,18 +1,7 @@
 {
-  "timeZone": "America/New_York",
-  "dependencies": {},
-  "oauthScopes": [
-    "https://www.googleapis.com/auth/gmail.addons.execute",
-    "https://www.googleapis.com/auth/drive"
-  ],
-  "addOns": {
-    "common": {
-      "name": "Video to Drive",
-      "logoUrl": "https://www.gstatic.com/images/icons/material/system/1x/video_library_black_48dp.png",
-      "homepageTrigger": {
-        "runFunction": "buildHomepage"
-      }
-    },
-    "gmail": {}
-  }
+  "timeZone": "GMT",
+  "dependencies": {
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8"
 }
