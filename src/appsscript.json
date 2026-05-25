@@ -1,7 +1,9 @@
 {
-  "timeZone": "GMT",
-  "dependencies": {
-  },
+  "timeZone": "Asia/Jerusalem",
+  "dependencies": {},
   "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8"
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/script.send_mail"
+  ]
 }
