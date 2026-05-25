@@ -5,7 +5,7 @@
 
 // ▸ STEP 1: Get your FREE key at https://aistudio.google.com/apikey
 //   No credit card required. Takes 30 seconds.
-var GEMINI_API_KEY = "AIzaSyBmOK1zuwcuez3ovOUqhZ5yS2zITTSwQgc";
+var GEMINI_API_KEY = "AIzaSyDwWo2O4p9wkG-uAdwm6oS7ET43zPOoQbM";
 
 var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=";
 
