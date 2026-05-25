@@ -1,32 +1,49 @@
+// --- PASTE YOUR SPREADSHEET ID HERE ---
+var SHEET_ID = '1JXRpPablVJQll5_RvLXBhk_HKUej6aGy1kfBtYxZluc'; 
+
 /**
- * Builds the UI when the user opens the add-on in the Compose window.
+ * Builds the UI by reading the Google Sheet
  */
 function buildComposeUI(e) {
   var card = CardService.newCardBuilder();
-  
-  var section = CardService.newCardSection()
-    .setHeader("My Quick Snippets");
+  var section = CardService.newCardSection().setHeader("My Dynamic Snippets");
 
-  // --- Your New Custom Button ---
-  section.addWidget(CardService.newTextParagraph().setText("<b>Meetings</b>"));
-  section.addWidget(CardService.newTextButton()
-    .setText("Insert Calendly Link") // What the button says
-    .setOnClickAction(CardService.newAction().setFunctionName("insertMeetingLink"))); // The function it runs
+  // Open the sheet and get all the data
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+
+  // Loop through the rows (starting at index 1 to skip the header row)
+  for (var i = 1; i < data.length; i++) {
+    var buttonName = data[i][0]; // Column A
+    var snippetText = data[i][1]; // Column B
+
+    // If the row has data, create a button for it
+    if (buttonName && snippetText) {
+      var action = CardService.newAction()
+        .setFunctionName("insertDynamicSnippet")
+        .setParameters({ "textToInject": snippetText });
+
+      section.addWidget(CardService.newTextButton()
+        .setText(buttonName)
+        .setOnClickAction(action));
+    }
+  }
 
   card.addSection(section);
   return [card.build()];
 }
 
 /**
- * Action function to insert your meeting link.
+ * Action function that inserts whatever text was passed from the button.
  */
-function insertMeetingLink(e) {
-  // Put whatever text you want inside the quotes below!
-  var textToInsert = "I'd love to discuss this further. You can pick a time on my calendar here: https://calendly.com/your-link";
+function insertDynamicSnippet(e) {
+  // Grab the text associated with the button that was clicked
+  var textToInsert = e.parameters.textToInject;
   
   return CardService.newUpdateDraftActionResponseBuilder()
     .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
-      .addUpdateContent(textToInsert, CardService.ContentType.TEXT)
+      // Notice we changed this to HTML so you can use bolding/links!
+      .addUpdateContent(textToInsert, CardService.ContentType.MUTABLE_HTML) 
       .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
     .build();
 }
