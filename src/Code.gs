@@ -7,40 +7,22 @@ function buildComposeUI(e) {
   var section = CardService.newCardSection()
     .setHeader("My Quick Snippets");
 
-  // --- Snippet 1: Technical Support ---
-  section.addWidget(CardService.newTextParagraph().setText("<b>Remote Access Instructions</b>"));
+  // --- Your New Custom Button ---
+  section.addWidget(CardService.newTextParagraph().setText("<b>Meetings</b>"));
   section.addWidget(CardService.newTextButton()
-    .setText("Insert AnyDesk Steps")
-    .setOnClickAction(CardService.newAction().setFunctionName("insertAnyDeskSnippet")));
-
-  // --- Snippet 2: File Links ---
-  section.addWidget(CardService.newTextParagraph().setText("<b>Course Materials</b>"));
-  section.addWidget(CardService.newTextButton()
-    .setText("Insert Module 1 Link")
-    .setOnClickAction(CardService.newAction().setFunctionName("insertCourseSnippet")));
+    .setText("Insert Calendly Link") // What the button says
+    .setOnClickAction(CardService.newAction().setFunctionName("insertMeetingLink"))); // The function it runs
 
   card.addSection(section);
   return [card.build()];
 }
 
 /**
- * Action function to insert the AnyDesk text.
+ * Action function to insert your meeting link.
  */
-function insertAnyDeskSnippet(e) {
-  var textToInsert = "Please download and run AnyDesk so I can connect to your computer. Once it opens, reply to this email with the 9-digit address displayed on your screen.";
-  
-  return CardService.newUpdateDraftActionResponseBuilder()
-    .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
-      .addUpdateContent(textToInsert, CardService.ContentType.TEXT)
-      .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
-    .build();
-}
-
-/**
- * Action function to insert the Course link text.
- */
-function insertCourseSnippet(e) {
-  var textToInsert = "Here is the link to access the first PDF module and video for the training: [Insert Link Here]";
+function insertMeetingLink(e) {
+  // Put whatever text you want inside the quotes below!
+  var textToInsert = "I'd love to discuss this further. You can pick a time on my calendar here: https://calendly.com/your-link";
   
   return CardService.newUpdateDraftActionResponseBuilder()
     .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
