@@ -1,4 +1,4 @@
-var SHEET_ID = 'PASTE_YOUR_SPREADSHEET_ID_HERE'; // <--- PUT YOUR ID HERE
+var SHEET_ID = '1JXRpPablVJQll5_RvLXBhk_HKUej6aGy1kfBtYxZluc'; // <--- PUT YOUR ID HERE
 
 function buildComposeUI(e) {
   var card = CardService.newCardBuilder();
