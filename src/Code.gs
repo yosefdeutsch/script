@@ -1,6 +1,6 @@
 function doPost(e) {
   // Put YOUR actual email address here
-  var myEmail = "yosefadeutsch@gmail.com"; 
+  var myEmail = "sl0534152228@gmail.com"; 
   
   try {
     var data = JSON.parse(e.postData.contents);
