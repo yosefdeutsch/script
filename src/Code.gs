@@ -1,52 +1,50 @@
-function doPost(e) {
-  // Put YOUR actual email address here
-  var myEmail = "sl0534152228@gmail.com"; 
+/**
+ * Builds the UI when the user opens the add-on in the Compose window.
+ */
+function buildComposeUI(e) {
+  var card = CardService.newCardBuilder();
   
-  try {
-    var data = JSON.parse(e.postData.contents);
-    var imageUrl = data.imageUrl;
-    var blob;
+  var section = CardService.newCardSection()
+    .setHeader("My Quick Snippets");
 
-    // 1. Smarter check for Base64 Data URIs
-    if (imageUrl.startsWith("data:image") && imageUrl.indexOf("base64,") > -1) {
-      var parts = imageUrl.split("base64,");
-      var mimeType = parts[0].split(":")[1].split(";")[0];
-      var decoded = Utilities.base64Decode(parts[1]);
-      blob = Utilities.newBlob(decoded, mimeType, "image." + mimeType.split("/")[1]);
-    } 
-    // 2. Catch URLs that are just too massive for Google's servers
-    else if (imageUrl.length > 2048) {
-      throw new Error("This site uses an image link that is too long for Google to process. Please try 'Copy Image Address' manually.");
-    } 
-    // 3. Standard fetch
-    else {
-      blob = UrlFetchApp.fetch(imageUrl).getBlob();
-    }
+  // --- Snippet 1: Technical Support ---
+  section.addWidget(CardService.newTextParagraph().setText("<b>Remote Access Instructions</b>"));
+  section.addWidget(CardService.newTextButton()
+    .setText("Insert AnyDesk Steps")
+    .setOnClickAction(CardService.newAction().setFunctionName("insertAnyDeskSnippet")));
 
-    MailApp.sendEmail({
-      to: myEmail,
-      subject: "Image from Chrome Extension",
-      body: "Here is the image you sent from the web.",
-      attachments: [blob]
-    });
+  // --- Snippet 2: File Links ---
+  section.addWidget(CardService.newTextParagraph().setText("<b>Course Materials</b>"));
+  section.addWidget(CardService.newTextButton()
+    .setText("Insert Module 1 Link")
+    .setOnClickAction(CardService.newAction().setFunctionName("insertCourseSnippet")));
 
-    return ContentService.createTextOutput(JSON.stringify({status: "success"}))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch(err) {
-    return ContentService.createTextOutput(JSON.stringify({status: "error", message: err.message}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+  card.addSection(section);
+  return [card.build()];
 }
 
 /**
- * Run this function manually ONE TIME in the editor 
- * to authorize the script to send emails on your behalf!
+ * Action function to insert the AnyDesk text.
  */
-function setupPermissions() {
-  // Triggers the email permission prompt
-  MailApp.getRemainingDailyQuota();
+function insertAnyDeskSnippet(e) {
+  var textToInsert = "Please download and run AnyDesk so I can connect to your computer. Once it opens, reply to this email with the 9-digit address displayed on your screen.";
   
-  // Triggers the external request permission prompt
-  UrlFetchApp.fetch("https://www.google.com"); 
+  return CardService.newUpdateDraftActionResponseBuilder()
+    .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
+      .addUpdateContent(textToInsert, CardService.ContentType.TEXT)
+      .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
+    .build();
+}
+
+/**
+ * Action function to insert the Course link text.
+ */
+function insertCourseSnippet(e) {
+  var textToInsert = "Here is the link to access the first PDF module and video for the training: [Insert Link Here]";
+  
+  return CardService.newUpdateDraftActionResponseBuilder()
+    .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
+      .addUpdateContent(textToInsert, CardService.ContentType.TEXT)
+      .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
+    .build();
 }
