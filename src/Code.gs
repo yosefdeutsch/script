@@ -114,6 +114,10 @@ function createRowWidget(item, messageId) {
 /**
  * THE HACK: This runs silently in the background when you click a button.
  */
+/**
+ * THE HACK: This runs silently in the background when you click a button.
+ * (Now with the encoding bug fixed!)
+ */
 function createGhostDraft(e) {
   var messageId = e.parameters.messageId;
   var text = e.parameters.text;
@@ -122,11 +126,12 @@ function createGhostDraft(e) {
   // Build the email body
   var finalHtml = text + "<br><br>";
   
-  // If you included a Google Drive File ID, grab it and link it!
+  // FIX: Using the safe HTML code (&#128193;) instead of the raw emoji
+  // This guarantees Gmail will render the folder icon perfectly every time.
   if (driveId) {
      try {
        var file = DriveApp.getFileById(driveId);
-       finalHtml += "📁 <b>Attached Document:</b> <a href='" + file.getUrl() + "'>" + file.getName() + "</a><br>";
+       finalHtml += "&#128193; <b>Attached Document:</b> <a href='" + file.getUrl() + "'>" + file.getName() + "</a><br>";
      } catch (err) {
        // Silently ignore if the ID is blank or wrong
      }
