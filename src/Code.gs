@@ -5,7 +5,7 @@
 
 // ▸ PASTE YOUR GEMINI API KEY HERE
 var GEMINI_API_KEY = "AIzaSyAIP5edFM8u-PdYYSAKqO7PtgBCuxu0hJQ";
-var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=";
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=";
 
 
 // ------------------------------------------------------------
@@ -46,21 +46,29 @@ function onGmailMessage(e) {
   var message = GmailApp.getMessageById(messageId);
   if (!message) return buildErrorCard("Could not load this email.");
 
-  var body        = message.getPlainBody().slice(0, 3000);
-  var subject     = message.getSubject();
-  var from        = message.getFrom();
-  var thread      = message.getThread();
-  var threadCount = thread ? thread.getMessageCount() : 1;
+  // Check cache first — avoids repeat API calls for same email
+  var cache = CacheService.getUserCache();
+  var cached = cache.get("email_" + messageId);
+  var data;
 
-  // Show loading state first, then analyze
-  var data = analyzeWithAI(subject, from, body);
+  if (cached) {
+    data = JSON.parse(cached);
+  } else {
+    var body        = message.getPlainBody().slice(0, 3000);
+    var subject     = message.getSubject();
+    var from        = message.getFrom();
+    data = analyzeWithAI(subject, from, body);
+    if (!data.error) {
+      cache.put("email_" + messageId, JSON.stringify(data), 3600); // cache 1 hour
+    }
+  }
 
   if (data.error) return buildErrorCard(data.error);
 
-  data.subject     = subject;
-  data.from        = from;
-  data.threadCount = threadCount;
-  data.wordCount   = body.split(/\s+/).filter(Boolean).length;
+  data.subject     = message.getSubject();
+  data.from        = message.getFrom();
+  data.threadCount = message.getThread() ? message.getThread().getMessageCount() : 1;
+  data.wordCount   = message.getPlainBody().split(/\s+/).filter(Boolean).length;
 
   return buildResultCard(data);
 }
