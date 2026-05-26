@@ -1,30 +1,22 @@
 {
-  "timeZone": "America/New_York",
+  "timeZone": "Asia/Jerusalem",
   "dependencies": {},
   "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8",
   "oauthScopes": [
+    "https://www.googleapis.com/auth/gmail.addons.execute",
     "https://www.googleapis.com/auth/gmail.addons.current.message.readonly",
-    "https://www.googleapis.com/auth/gmail.addons.execute"
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/drive.readonly"
   ],
-  "addOns": {
-    "common": {
-      "name": "Action Extractor",
-      "logoUrl": "https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/bolt/default/48px.svg",
-      "homepageTrigger": {
-        "runFunction": "onGmailHomepage"
+  "gmail": {
+    "name": "Ghost Draft Assistant",
+    "logoUrl": "https://www.gstatic.com/images/icons/material/system/1x/quickreply_black_24dp.png",
+    "contextualTriggers": [
+      {
+        "unconditional": {},
+        "onTriggerFunction": "buildSidebarUI"
       }
-    },
-    "gmail": {
-      "homepageTrigger": {
-        "runFunction": "onGmailHomepage"
-      },
-      "contextualTriggers": [
-        {
-          "unconditional": {},
-          "onTriggerFunction": "onGmailMessage"
-        }
-      ]
-    }
+    ]
   }
 }
