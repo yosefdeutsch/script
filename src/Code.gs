@@ -4,7 +4,7 @@
 // ============================================================
 
 // ▸ PASTE YOUR GEMINI API KEY HERE
-var GEMINI_API_KEY = "AIzaSyAIP5edFM8u-PdYYSAKqO7PtgBCuxu0hJQ";
+var GEMINI_API_KEY = "AIzaSyAKZ52Huqcj-UJ24J6wyEP3OQjGyZB45II";
 var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=";
 
 
