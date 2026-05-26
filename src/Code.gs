@@ -2,7 +2,7 @@
 var SHEET_ID = '1JXRpPablVJQll5_RvLXBhk_HKUej6aGy1kfBtYxZluc'; 
 
 /**
- * 1. THE UI: Builds the right-sidebar with your buttons.
+ * 1. THE UI: Builds the right-sidebar with Categories and Context Detective!
  */
 function buildSidebarUI(e) {
   var card = CardService.newCardBuilder();
@@ -12,33 +12,92 @@ function buildSidebarUI(e) {
       .setImageStyle(CardService.ImageStyle.CIRCLE)
       .setImageUrl("https://www.gstatic.com/images/icons/material/system/1x/auto_awesome_black_24dp.png"));
 
-  var section = CardService.newCardSection().setHeader("⚡ Quick Templates");
   var messageId = e.gmail.messageId;
-  
-  // We look at your first tab for the templates (Sheet1)
+  var message = GmailApp.getMessageById(messageId);
+  var subject = message.getSubject().toLowerCase();
+
+  // Grab the template data from the first sheet
   var sheet = SpreadsheetApp.openById(SHEET_ID).getSheets()[0];
   var data = sheet.getDataRange().getValues();
 
+  var categories = {};
+  var suggested = [];
+
+  // Sort the database
   for (var i = 1; i < data.length; i++) {
     var name = data[i][0];
     var text = data[i][1];
     var driveId = data[i][2];
+    var keywords = String(data[i][3]).toLowerCase(); // Column D
+    var category = data[i][4] || "Uncategorized";    // Column E
 
     if (name) {
-      var action = CardService.newAction()
-        .setFunctionName("createGhostDraft")
-        .setParameters({ "messageId": messageId, "text": text || "", "driveId": driveId || "", "templateName": name });
+      var item = {name: name, text: text, driveId: driveId};
+      var isMatch = false;
 
-      var row = CardService.newDecoratedText()
-        .setText("<b>" + name + "</b>")
-        .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.EMAIL))
-        .setButton(CardService.newTextButton().setText("Draft It").setOnClickAction(action));
+      // The Context Detective Logic
+      if (keywords && keywords !== "undefined") {
+        var keys = keywords.split(',');
+        for (var k = 0; k < keys.length; k++) {
+          if (subject.indexOf(keys[k].trim()) !== -1) {
+            isMatch = true; break;
+          }
+        }
+      }
 
-      section.addWidget(row);
+      if (isMatch) {
+        suggested.push(item);
+      } else {
+        if (!categories[category]) categories[category] = [];
+        categories[category].push(item);
+      }
     }
   }
-  card.addSection(section);
+
+  // Build "✨ Suggested" Section
+  if (suggested.length > 0) {
+    var sugSection = CardService.newCardSection().setHeader("✨ Suggested for this Email");
+    for (var s = 0; s < suggested.length; s++) {
+       sugSection.addWidget(createRowWidget(suggested[s], messageId));
+    }
+    card.addSection(sugSection);
+  }
+
+  // Build Collapsible Category Sections
+  for (var cat in categories) {
+    var catSection = CardService.newCardSection()
+        .setHeader("📁 " + cat)
+        .setCollapsible(true)
+        .setNumUncollapsibleWidgets(0); 
+
+    for (var c = 0; c < categories[cat].length; c++) {
+       catSection.addWidget(createRowWidget(categories[cat][c], messageId));
+    }
+    card.addSection(catSection);
+  }
+
   return [card.build()];
+}
+
+/**
+ * HELPER FUNCTION: Builds the rows for the UI
+ */
+function createRowWidget(item, messageId) {
+  var action = CardService.newAction()
+      .setFunctionName("createGhostDraft")
+      .setParameters({ "messageId": messageId, "text": item.text || "", "driveId": item.driveId || "", "templateName": item.name });
+
+  var textPreview = "File Attachment Only";
+  if (item.text) {
+      textPreview = String(item.text).substring(0, 35);
+      if (String(item.text).length > 35) textPreview += "...";
+  }
+
+  return CardService.newDecoratedText()
+      .setText("<b>" + item.name + "</b>")
+      .setBottomLabel(textPreview)
+      .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.EMAIL))
+      .setButton(CardService.newTextButton().setText("Draft It").setOnClickAction(action));
 }
 
 /**
@@ -54,22 +113,18 @@ function createGhostDraft(e) {
   var senderStr = message.getFrom();
   var subject = message.getSubject();
   
-  // --- MASSIVE FEATURE 1: Smart Variable Injector (Name) ---
-  // Extracts the first name from the "From:" line (e.g., "John Doe <john@email.com>" -> "John")
+  // Extract Name for {{Name}}
   var nameMatch = senderStr.match(/^"?([^"<]+)/);
   var clientName = nameMatch ? nameMatch[1].trim().split(' ')[0] : 'there';
-  
-  // Swap {{Name}} in your text with the real name
   text = text.replace(/{{Name}}/g, clientName);
 
-  // --- MASSIVE FEATURE 2: Zero-Touch Calendar ---
-  // If your template uses {{Calendar}}, find 3 open slots in the next few days
+  // Extract Calendar for {{Calendar}}
   if (text.indexOf("{{Calendar}}") !== -1) {
     var freeSlots = getNextFreeSlots();
     text = text.replace(/{{Calendar}}/g, freeSlots);
   }
 
-  // --- BUILD THE HTML BODY ---
+  // Build final HTML with safe Folder Emoji
   var finalHtml = text + "<br><br>";
   if (driveId) {
      try {
@@ -81,14 +136,13 @@ function createGhostDraft(e) {
   // Create the silent draft!
   message.createDraftReply("", { htmlBody: finalHtml }); 
 
-  // --- MASSIVE FEATURE 3: Silent CRM Logger ---
+  // CRM Logger
   try {
     var logSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Logs');
     var cleanEmail = senderStr.match(/<([^>]+)>/) ? senderStr.match(/<([^>]+)>/)[1] : senderStr;
-    // Logs: Date, Email Address, Client Name, Subject, Template Used
     logSheet.appendRow([new Date(), cleanEmail, clientName, subject, templateName]);
   } catch(err) {
-    // Ignore if the Logs sheet isn't set up right yet
+    // Ignore if 'Logs' sheet isn't created yet
   }
 
   return CardService.newActionResponseBuilder()
@@ -100,7 +154,6 @@ function createGhostDraft(e) {
 
 /**
  * 3. HELPER: The Calendar Detective
- * Scans your default calendar to find 3 open 1-hour blocks on upcoming weekdays.
  */
 function getNextFreeSlots() {
   var cal = CalendarApp.getDefaultCalendar();
@@ -108,20 +161,17 @@ function getNextFreeSlots() {
   var slots = [];
   var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   
-  // Look ahead up to 5 days to find 3 empty slots
   for (var i = 1; i <= 5 && slots.length < 3; i++) {
     var checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-    if (checkDate.getDay() === 6 || checkDate.getDay() === 0) continue; // Skip weekends
+    if (checkDate.getDay() === 6 || checkDate.getDay() === 0) continue; 
     
     var events = cal.getEventsForDay(checkDate);
-    // Check popular meeting times: 10 AM, 1 PM, and 3 PM
     var hoursToCheck = [10, 13, 15]; 
     
     for (var h = 0; h < hoursToCheck.length; h++) {
        var slotStart = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate(), hoursToCheck[h], 0, 0);
-       var slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000); // 1 hour later
+       var slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000); 
        
-       // Does this slot overlap with any events on your calendar?
        var conflict = events.some(function(e) {
          return !(e.getEndTime() <= slotStart || e.getStartTime() >= slotEnd);
        });
@@ -134,12 +184,7 @@ function getNextFreeSlots() {
     }
   }
   
-  // Format the output beautifully for your email
-  if (slots.length === 3) {
-    return slots[0] + ", " + slots[1] + ", or " + slots[2];
-  } else if (slots.length > 0) {
-    return slots.join(" or ");
-  } else {
-    return "sometime next week"; // Fallback if you are completely booked!
-  }
+  if (slots.length === 3) return slots[0] + ", " + slots[1] + ", or " + slots[2];
+  else if (slots.length > 0) return slots.join(" or ");
+  else return "sometime next week"; 
 }
