@@ -4,25 +4,32 @@ var SHEET_ID = '1JXRpPablVJQll5_RvLXBhk_HKUej6aGy1kfBtYxZluc';
 /**
  * This builds the beautiful right-sidebar UI when you open an email.
  */
+/**
+ * The UPGRADED beautiful right-sidebar UI.
+ */
 function buildSidebarUI(e) {
   var card = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("⚡ 1-Click Ghost Drafts");
+  
+  // 1. Add a Professional Header
+  card.setHeader(CardService.newCardHeader()
+      .setTitle("Ghost Draft Assistant")
+      .setSubtitle("1-Click Email Replies")
+      .setImageStyle(CardService.ImageStyle.CIRCLE)
+      .setImageUrl("https://www.gstatic.com/images/icons/material/system/1x/auto_awesome_black_24dp.png"));
 
-  // We must grab the ID of the email you are currently reading
+  var section = CardService.newCardSection().setHeader("⚡ Quick Templates");
+
   var messageId = e.gmail.messageId;
-
-  // Open your database
   var sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
   var data = sheet.getDataRange().getValues();
 
-  // Loop through your Google Sheet to make the buttons
   for (var i = 1; i < data.length; i++) {
     var name = data[i][0];
     var text = data[i][1];
     var driveId = data[i][2];
 
     if (name) {
-      // Package the message ID and your template text into the button
+      // Package the data
       var action = CardService.newAction()
         .setFunctionName("createGhostDraft")
         .setParameters({ 
@@ -31,9 +38,23 @@ function buildSidebarUI(e) {
           "driveId": driveId || "" 
         });
 
-      section.addWidget(CardService.newTextButton()
-        .setText(name)
-        .setOnClickAction(action));
+      // Create a short preview of the text for the bottom label (max 35 characters)
+      var textPreview = "File Attachment Only";
+      if (text) {
+         textPreview = String(text).substring(0, 35);
+         if (String(text).length > 35) textPreview += "...";
+      }
+
+      // 2. Build the upgraded Decorated Text Row
+      var row = CardService.newDecoratedText()
+        .setText("<b>" + name + "</b>")
+        .setBottomLabel(textPreview)
+        .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.EMAIL))
+        .setButton(CardService.newTextButton()
+          .setText("Draft It")
+          .setOnClickAction(action));
+
+      section.addWidget(row);
     }
   }
 
