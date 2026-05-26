@@ -1,190 +1,140 @@
-// --- PASTE YOUR SPREADSHEET ID HERE ---
-var SHEET_ID = '1JXRpPablVJQll5_RvLXBhk_HKUej6aGy1kfBtYxZluc'; 
+var SHEET_ID = '1ZHNIebT6cARL1HIrdf_-42yxhcCd4L5dnP7ogVypTH8'; // <--- PUT YOUR ID HERE
 
-/**
- * 1. THE UI: Builds the right-sidebar with Categories and Context Detective!
- */
-function buildSidebarUI(e) {
+function buildComposeUI(e) {
   var card = CardService.newCardBuilder();
-  card.setHeader(CardService.newCardHeader()
-      .setTitle("Executive Assistant")
-      .setSubtitle("Smart Drafts & CRM")
-      .setImageStyle(CardService.ImageStyle.CIRCLE)
-      .setImageUrl("https://www.gstatic.com/images/icons/material/system/1x/auto_awesome_black_24dp.png"));
+  
+  // THE CONTEXT DETECTIVE: Read the draft subject
+  var subject = "";
+  if (e.gmail && e.gmail.draftMetadata && e.gmail.draftMetadata.subject) {
+    subject = e.gmail.draftMetadata.subject.toLowerCase();
+  }
 
-  var messageId = e.gmail.messageId;
-  var message = GmailApp.getMessageById(messageId);
-  var subject = message.getSubject().toLowerCase();
+  // --- FEATURE 1: SMART CALENDAR ---
+  var calSection = CardService.newCardSection().setHeader("📅 Smart Actions");
+  calSection.addWidget(CardService.newTextButton()
+    .setText("Insert My Free Time (Next 3 Days)")
+    .setOnClickAction(CardService.newAction().setFunctionName("insertCalendarSlots")));
+  card.addSection(calSection);
 
-  // Grab the template data from the first sheet
-  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheets()[0];
+  // --- READ THE DATABASE ---
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
   var data = sheet.getDataRange().getValues();
 
-  var categories = {};
-  var suggested = [];
+  var contextSection = CardService.newCardSection().setHeader("🎯 Suggested for this Email");
+  var allSection = CardService.newCardSection().setHeader("🗄️ All Snippets & Files");
+  var hasSuggestions = false;
 
-  // Sort the database
   for (var i = 1; i < data.length; i++) {
     var name = data[i][0];
     var text = data[i][1];
     var driveId = data[i][2];
-    var keywords = String(data[i][3]).toLowerCase(); // Column D
-    var category = data[i][4] || "Uncategorized";    // Column E
+    var keywords = data[i][3] ? data[i][3].toString().toLowerCase() : "";
 
-    if (name) {
-      var item = {name: name, text: text, driveId: driveId};
-      var isMatch = false;
+    if (!name) continue;
 
-      // The Context Detective Logic
-      if (keywords && keywords !== "undefined") {
-        var keys = keywords.split(',');
-        for (var k = 0; k < keys.length; k++) {
-          if (subject.indexOf(keys[k].trim()) !== -1) {
-            isMatch = true; break;
-          }
-        }
-      }
+    // Build the action for this button
+    var action = CardService.newAction()
+      .setFunctionName("insertVaultSnippet")
+      .setParameters({ "text": text || "", "driveId": driveId || "" });
 
-      if (isMatch) {
-        suggested.push(item);
-      } else {
-        if (!categories[category]) categories[category] = [];
-        categories[category].push(item);
-      }
+    var button = CardService.newTextButton().setText(name).setOnClickAction(action);
+    
+    // Check if keywords match the email subject
+    var isMatch = false;
+    if (keywords && subject) {
+       var kwArray = keywords.split(",");
+       for (var k = 0; k < kwArray.length; k++) {
+         if (subject.indexOf(kwArray[k].trim()) > -1) {
+            isMatch = true;
+            break;
+         }
+       }
     }
+
+    if (isMatch) {
+       contextSection.addWidget(button);
+       hasSuggestions = true;
+    }
+    allSection.addWidget(button);
   }
 
-  // Build "✨ Suggested" Section
-  if (suggested.length > 0) {
-    var sugSection = CardService.newCardSection().setHeader("✨ Suggested for this Email");
-    for (var s = 0; s < suggested.length; s++) {
-       sugSection.addWidget(createRowWidget(suggested[s], messageId));
-    }
-    card.addSection(sugSection);
-  }
-
-  // Build Collapsible Category Sections
-  for (var cat in categories) {
-    var catSection = CardService.newCardSection()
-        .setHeader("📁 " + cat)
-        .setCollapsible(true)
-        .setNumUncollapsibleWidgets(0); 
-
-    for (var c = 0; c < categories[cat].length; c++) {
-       catSection.addWidget(createRowWidget(categories[cat][c], messageId));
-    }
-    card.addSection(catSection);
-  }
+  if (hasSuggestions) card.addSection(contextSection);
+  card.addSection(allSection);
 
   return [card.build()];
 }
 
 /**
- * HELPER FUNCTION: Builds the rows for the UI
+ * FEATURE 2: THE VAULT (Inserts Text + Drive Links)
  */
-function createRowWidget(item, messageId) {
-  var action = CardService.newAction()
-      .setFunctionName("createGhostDraft")
-      .setParameters({ "messageId": messageId, "text": item.text || "", "driveId": item.driveId || "", "templateName": item.name });
-
-  var textPreview = "File Attachment Only";
-  if (item.text) {
-      textPreview = String(item.text).substring(0, 35);
-      if (String(item.text).length > 35) textPreview += "...";
-  }
-
-  return CardService.newDecoratedText()
-      .setText("<b>" + item.name + "</b>")
-      .setBottomLabel(textPreview)
-      .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.EMAIL))
-      .setButton(CardService.newTextButton().setText("Draft It").setOnClickAction(action));
-}
-
-/**
- * 2. THE BRAIN: Generates the draft, injects variables, finds free time, and logs to CRM.
- */
-function createGhostDraft(e) {
-  var messageId = e.parameters.messageId;
+function insertVaultSnippet(e) {
   var text = e.parameters.text;
   var driveId = e.parameters.driveId;
-  var templateName = e.parameters.templateName;
-
-  var message = GmailApp.getMessageById(messageId);
-  var senderStr = message.getFrom();
-  var subject = message.getSubject();
-  
-  // Extract Name for {{Name}}
-  var nameMatch = senderStr.match(/^"?([^"<]+)/);
-  var clientName = nameMatch ? nameMatch[1].trim().split(' ')[0] : 'there';
-  text = text.replace(/{{Name}}/g, clientName);
-
-  // Extract Calendar for {{Calendar}}
-  if (text.indexOf("{{Calendar}}") !== -1) {
-    var freeSlots = getNextFreeSlots();
-    text = text.replace(/{{Calendar}}/g, freeSlots);
-  }
-
-  // Build final HTML with safe Folder Emoji
   var finalHtml = text + "<br><br>";
+  
   if (driveId) {
      try {
        var file = DriveApp.getFileById(driveId);
-       finalHtml += "&#128193; <b>Attached Document:</b> <a href='" + file.getUrl() + "'>" + file.getName() + "</a><br>";
-     } catch (err) {}
+       var url = file.getUrl();
+       var name = file.getName();
+       finalHtml += "📁 <b>Attached Document:</b> <a href='" + url + "'>" + name + "</a><br>";
+     } catch (err) {
+       finalHtml += "<i>(⚠️ Could not fetch Drive file. Please check the ID in your Sheet.)</i>";
+     }
   }
 
-  // Create the silent draft!
-  message.createDraftReply("", { htmlBody: finalHtml }); 
-
-  // CRM Logger
-  try {
-    var logSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Logs');
-    var cleanEmail = senderStr.match(/<([^>]+)>/) ? senderStr.match(/<([^>]+)>/)[1] : senderStr;
-    logSheet.appendRow([new Date(), cleanEmail, clientName, subject, templateName]);
-  } catch(err) {
-    // Ignore if 'Logs' sheet isn't created yet
-  }
-
-  return CardService.newActionResponseBuilder()
-    .setNotification(CardService.newNotification()
-      .setText("✅ Smart Draft Created & Logged to CRM!")
-      .setType(CardService.NotificationType.INFO))
+  return CardService.newUpdateDraftActionResponseBuilder()
+    .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
+      .addUpdateContent(finalHtml, CardService.ContentType.MUTABLE_HTML)
+      .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
     .build();
 }
 
 /**
- * 3. HELPER: The Calendar Detective
+ * FEATURE 3: SMART CALENDAR ALGORITHM
  */
-function getNextFreeSlots() {
+function insertCalendarSlots(e) {
   var cal = CalendarApp.getDefaultCalendar();
   var now = new Date();
-  var slots = [];
-  var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  
-  for (var i = 1; i <= 5 && slots.length < 3; i++) {
-    var checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-    if (checkDate.getDay() === 6 || checkDate.getDay() === 0) continue; 
+  var html = "Here are a few times I am available over the coming days:<ul>";
+  var slotsFound = 0;
+
+  // Look ahead up to 4 days, max 4 slots
+  for (var d = 1; d <= 4 && slotsFound < 4; d++) { 
+    var date = new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
+    if (date.getDay() === 6 || date.getDay() === 0) continue; // Skip weekends
     
-    var events = cal.getEventsForDay(checkDate);
-    var hoursToCheck = [10, 13, 15]; 
+    var workStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 9, 0, 0); // 9 AM
+    var workEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 17, 0, 0);  // 5 PM
     
-    for (var h = 0; h < hoursToCheck.length; h++) {
-       var slotStart = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate(), hoursToCheck[h], 0, 0);
-       var slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000); 
-       
-       var conflict = events.some(function(e) {
-         return !(e.getEndTime() <= slotStart || e.getStartTime() >= slotEnd);
-       });
-       
-       if (!conflict) {
-          var timeString = hoursToCheck[h] > 12 ? (hoursToCheck[h] - 12) + " PM" : hoursToCheck[h] + " AM";
-          slots.push(days[slotStart.getDay()] + " at " + timeString);
-          if (slots.length >= 3) break;
-       }
+    var events = cal.getEvents(workStart, workEnd);
+    var currentCheck = workStart;
+    
+    for (var i = 0; i < events.length; i++) {
+      var evStart = events[i].getStartTime();
+      var evEnd = events[i].getEndTime();
+      
+      // If there is at least a 1-hour gap
+      if (evStart.getTime() - currentCheck.getTime() >= 60 * 60 * 1000) {
+         html += "<li>" + date.toDateString() + " at " + currentCheck.getHours() + ":00</li>";
+         slotsFound++;
+      }
+      if (evEnd > currentCheck) currentCheck = evEnd;
+    }
+    
+    // Check for a gap after the last event of the day
+    if (workEnd.getTime() - currentCheck.getTime() >= 60 * 60 * 1000 && slotsFound < 4) {
+       html += "<li>" + date.toDateString() + " at " + currentCheck.getHours() + ":00</li>";
+       slotsFound++;
     }
   }
   
-  if (slots.length === 3) return slots[0] + ", " + slots[1] + ", or " + slots[2];
-  else if (slots.length > 0) return slots.join(" or ");
-  else return "sometime next week"; 
+  if (slotsFound === 0) html += "<li><i>My calendar is booked solid for the next few days. Please suggest a time!</i></li>";
+  html += "</ul>";
+
+  return CardService.newUpdateDraftActionResponseBuilder()
+    .setUpdateDraftBodyAction(CardService.newUpdateDraftBodyAction()
+      .addUpdateContent(html, CardService.ContentType.MUTABLE_HTML)
+      .setUpdateType(CardService.UpdateDraftBodyType.IN_PLACE_INSERT))
+    .build();
 }
