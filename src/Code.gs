@@ -1,5 +1,5 @@
 // --- PASTE YOUR SPREADSHEET ID HERE ---
-var SHEET_ID = 'PASTE_YOUR_ID_HERE'; 
+var SHEET_ID = '1JXRpPablVJQll5_RvLXBhk_HKUej6aGy1kfBtYxZluc'; 
 
 /**
  * This builds the beautiful right-sidebar UI when you open an email.
