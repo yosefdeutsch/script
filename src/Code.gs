@@ -1,107 +1,91 @@
-// 1. doGet creates the visual webpage when you open the URL in your browser
-function doGet(e) {
-  return HtmlService.createHtmlOutput(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <base target="_top">
-        <style>
-          body { font-family: Arial, sans-serif; padding: 30px; max-width: 500px; margin: 0 auto; background: #f9f9f9; }
-          .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-          input { width: 100%; padding: 10px; margin: 10px 0 20px 0; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-          button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-          button:disabled { background: #aaa; cursor: not-allowed; }
-          #status { margin-top: 15px; font-weight: bold; text-align: center; }
-          a { color: #007bff; text-decoration: none; }
-          a:hover { text-decoration: underline; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h2>Save Video to Drive</h2>
-          
-          <label>Video URL (required):</label>
-          <input type="text" id="videoUrl" placeholder="https://example.com/video.mp4" />
+// 1. Builds the visual interface for the Gmail sidebar
+function buildAddOn(e) {
+  var card = CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle("Save Video to Drive"));
 
-          <label>File Name (optional):</label>
-          <input type="text" id="fileName" placeholder="my_downloaded_video.mp4" />
+  var section = CardService.newCardSection();
 
-          <button id="btn" onclick="saveVideo()">Download to Drive</button>
+  var urlInput = CardService.newTextInput()
+    .setFieldName("videoUrl")
+    .setTitle("Video URL (required)");
 
-          <div id="status"></div>
-        </div>
+  var nameInput = CardService.newTextInput()
+    .setFieldName("fileName")
+    .setTitle("File Name (optional)");
 
-        <script>
-          function saveVideo() {
-            var url = document.getElementById('videoUrl').value;
-            var name = document.getElementById('fileName').value || 'downloaded_video.mp4';
-            var statusEl = document.getElementById('status');
-            var btn = document.getElementById('btn');
+  var action = CardService.newAction().setFunctionName("handleDownload");
+  var button = CardService.newTextButton()
+    .setText("Download to Drive")
+    .setOnClickAction(action)
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
 
-            if (!url) {
-              statusEl.innerText = 'Please enter a URL first.';
-              statusEl.style.color = 'red';
-              return;
-            }
-
-            statusEl.innerText = 'Downloading to Drive... Please wait (this may take up to a minute).';
-            statusEl.style.color = '#333';
-            btn.disabled = true;
-
-            // This calls the server-side Apps Script function
-            google.script.run
-              .withSuccessHandler(function(result) {
-                if (result.success) {
-                  statusEl.innerHTML = '✅ Success! <a href="' + result.fileUrl + '" target="_blank">Click here to view in Drive</a>';
-                } else {
-                  statusEl.innerText = '❌ Error: ' + result.error;
-                  statusEl.style.color = 'red';
-                }
-                btn.disabled = false;
-              })
-              .withFailureHandler(function(error) {
-                statusEl.innerText = '❌ Execution Error: ' + error.message;
-                statusEl.style.color = 'red';
-                btn.disabled = false;
-              })
-              .processVideoDownload(url, name);
-          }
-        </script>
-      </body>
-    </html>
-  `).setTitle('Drive Video Downloader');
+  section.addWidget(urlInput);
+  section.addWidget(nameInput);
+  section.addWidget(button);
+  
+  card.addSection(section);
+  return card.build();
 }
 
-// 2. doPost keeps the API working for your Render Server
+// 2. Handles the button click in Gmail
+function handleDownload(e) {
+  var url = e.formInput.videoUrl;
+  var name = e.formInput.fileName || "downloaded_video.mp4";
+
+  if (!url) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("Please enter a valid URL."))
+      .build();
+  }
+
+  // Call our core download function
+  var result = processVideoDownload(url, name);
+
+  if (result.success) {
+    // Build a success screen with a link to open the file
+    var openLink = CardService.newOpenLink().setUrl(result.fileUrl);
+    var viewButton = CardService.newTextButton()
+      .setText("Open in Drive")
+      .setOpenLink(openLink);
+
+    var successSection = CardService.newCardSection()
+      .addWidget(CardService.newTextParagraph().setText("✅ Successfully saved to your Drive!"))
+      .addWidget(viewButton);
+
+    var successCard = CardService.newCardBuilder().addSection(successSection).build();
+
+    return CardService.newActionResponseBuilder()
+      .setNavigation(CardService.newNavigation().pushCard(successCard))
+      .build();
+  } else {
+    // Show a popup notification if it fails
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("❌ Error: " + result.error))
+      .build();
+  }
+}
+
+// 3. Keeps the API working for your Render Server
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const result = processVideoDownload(data.videoUrl, data.fileName || "downloaded_video.mp4");
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
-      success: false,
-      error: error.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-// 3. The core function that does the actual downloading (used by both UI and API)
+// 4. The Core Download Logic (Used by both Gmail and Render)
 function processVideoDownload(videoUrl, fileName) {
   try {
     const response = UrlFetchApp.fetch(videoUrl);
     const blob = response.getBlob().setName(fileName);
     const file = DriveApp.createFile(blob);
     
-    return {
-      success: true,
-      fileId: file.getId(),
-      fileUrl: file.getUrl()
-    };
+    return { success: true, fileId: file.getId(), fileUrl: file.getUrl() };
   } catch (error) {
-    return {
-      success: false,
-      error: error.toString()
-    };
+    return { success: false, error: error.toString() };
   }
 }

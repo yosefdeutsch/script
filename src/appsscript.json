@@ -1,26 +1,21 @@
 {
-  "timeZone": "Asia/Jerusalem",
+  "timeZone": "America/New_York",
   "dependencies": {},
   "exceptionLogging": "STACKDRIVER",
   "oauthScopes": [
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/gmail.addons.execute",
-    "https://www.googleapis.com/auth/gmail.addons.current.action.compose",
-    "https://www.googleapis.com/auth/gmail.addons.current.message.metadata",
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/calendar.readonly"
+    "https://www.googleapis.com/auth/script.external_request"
   ],
-  "gmail": {
-    "name": "Ultimate Assistant",
-    "logoUrl": "https://www.gstatic.com/images/icons/material/system/1x/assistant_black_24dp.png",
-    "composeTrigger": {
-      "selectActions": [
-        {
-          "text": "Open Assistant",
-          "runFunction": "buildComposeUI"
-        }
-      ],
-      "draftAccess": "METADATA"
-    }
+  "runtimeVersion": "V8",
+  "addOns": {
+    "common": {
+      "name": "Drive Video Downloader",
+      "logoUrl": "https://www.gstatic.com/images/icons/material/system/1x/file_download_black_24dp.png",
+      "homepageTrigger": {
+        "runFunction": "buildAddOn"
+      }
+    },
+    "gmail": {}
   }
 }
