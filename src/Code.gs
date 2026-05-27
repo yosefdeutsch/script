@@ -80,8 +80,38 @@ function doPost(e) {
 // 4. The Core Download Logic (Used by both Gmail and Render)
 function processVideoDownload(videoUrl, fileName) {
   try {
-    const response = UrlFetchApp.fetch(videoUrl);
-    const blob = response.getBlob().setName(fileName);
+    let finalDownloadUrl = videoUrl;
+    let finalFileName = fileName || "downloaded_video.mp4";
+
+    // 1. If it's a YouTube link, ask Render to extract the raw mp4 first
+    if (videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be")) {
+      
+      // REPLACE THIS with your actual Render URL
+      const renderApiUrl = "https://cloud-video-bot.onrender.com/api/extract-youtube"; 
+      
+      const renderResponse = UrlFetchApp.fetch(renderApiUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ url: videoUrl }),
+        muteHttpExceptions: true
+      });
+
+      const renderData = JSON.parse(renderResponse.getContentText());
+
+      if (!renderData.success) {
+        return { success: false, error: "Render Middleman failed: " + renderData.error };
+      }
+
+      // Update the variables with the raw data Render found
+      finalDownloadUrl = renderData.rawVideoUrl;
+      if (!fileName) {
+        finalFileName = renderData.title + ".mp4"; 
+      }
+    }
+
+    // 2. Now download the RAW file (Apps Script will no longer hit a 429 error!)
+    const response = UrlFetchApp.fetch(finalDownloadUrl);
+    const blob = response.getBlob().setName(finalFileName);
     const file = DriveApp.createFile(blob);
     
     return { success: true, fileId: file.getId(), fileUrl: file.getUrl() };
