@@ -93,5 +93,4 @@ function forceAuth() {
   // This forces Google to ask for file CREATION permissions specifically
   DriveApp.createFile("auth_test.txt", "You can delete this file.");
   UrlFetchApp.fetch("https://www.google.com");
-}UrlFetchApp.fetch("https://www.google.com");
 }
