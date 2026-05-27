@@ -89,3 +89,8 @@ function processVideoDownload(videoUrl, fileName) {
     return { success: false, error: error.toString() };
   }
 }
+function forceAuth() {
+  // This explicitly calls the protected services to trigger the security pop-up
+  DriveApp.getFiles();
+  UrlFetchApp.fetch("https://www.google.com");
+}
