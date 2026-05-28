@@ -82,13 +82,14 @@ function processVideoDownload(videoUrl, fileName) {
   try {
     let finalDownloadUrl = videoUrl;
     let finalFileName = fileName || "downloaded_video.mp4";
+    
+    // We use this flag if Render is sending us the raw video directly (m3u8)
+    let isDirectStream = false; 
+    let finalBlob = null;
 
-    // 1. If it's a YouTube link, ask Render to extract the raw mp4 first
+    // 1. YOUTUBE LOGIC
     if (videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be")) {
-      
-      // REPLACE THIS with your actual Render URL
       const renderApiUrl = "https://cloud-video-bot.onrender.com/api/extract-youtube"; 
-      
       const renderResponse = UrlFetchApp.fetch(renderApiUrl, {
         method: "post",
         contentType: "application/json",
@@ -97,30 +98,46 @@ function processVideoDownload(videoUrl, fileName) {
       });
 
       const renderData = JSON.parse(renderResponse.getContentText());
-
-      if (!renderData.success) {
-        return { success: false, error: "Render Middleman failed: " + renderData.error };
-      }
-
-      // Update the variables with the raw data Render found
+      if (!renderData.success) return { success: false, error: renderData.error };
+      
       finalDownloadUrl = renderData.rawVideoUrl;
-      if (!fileName) {
-        finalFileName = renderData.title + ".mp4"; 
+      if (!fileName) finalFileName = renderData.title + ".mp4"; 
+    }
+    
+    // 2. M3U8 LOGIC
+    else if (videoUrl.includes(".m3u8")) {
+      const renderApiUrl = "https://cloud-video-bot.onrender.com/api/convert-m3u8";
+      
+      // Call Render and wait for it to stitch and send back the actual video file
+      const renderResponse = UrlFetchApp.fetch(renderApiUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ url: videoUrl }),
+        muteHttpExceptions: true
+      });
+
+      if (renderResponse.getResponseCode() !== 200) {
+        return { success: false, error: "Render failed to convert m3u8 stream." };
       }
+
+      finalBlob = renderResponse.getBlob().setName(finalFileName);
+      isDirectStream = true;
     }
 
-    // 2. Now download the RAW file (Apps Script will no longer hit a 429 error!)
-    const response = UrlFetchApp.fetch(finalDownloadUrl);
-    const blob = response.getBlob().setName(finalFileName);
-    const file = DriveApp.createFile(blob);
+    // 3. FINAL SAVE TO DRIVE
+    let file;
+    if (isDirectStream) {
+      // If it was m3u8, Render already handed us the video blob
+      file = DriveApp.createFile(finalBlob);
+    } else {
+      // If it was YouTube or a normal mp4, Apps Script downloads it now
+      const response = UrlFetchApp.fetch(finalDownloadUrl);
+      const blob = response.getBlob().setName(finalFileName);
+      file = DriveApp.createFile(blob);
+    }
     
     return { success: true, fileId: file.getId(), fileUrl: file.getUrl() };
   } catch (error) {
     return { success: false, error: error.toString() };
   }
-}
-function forceAuth() {
-  // This forces Google to ask for file CREATION permissions specifically
-  DriveApp.createFile("auth_test.txt", "You can delete this file.");
-  UrlFetchApp.fetch("https://www.google.com");
 }
