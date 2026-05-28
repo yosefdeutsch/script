@@ -202,3 +202,8 @@ function onCheckStatus(e) {
       .build();
   }
 }
+function checkJobNow() {
+  var jobId = "7d7e9c25-79e2-42db-9eac-734462166f12";
+  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  Logger.log(response.getContentText());
+}
