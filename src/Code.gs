@@ -1,143 +1,145 @@
-// 1. Builds the visual interface for the Gmail sidebar
+// ── CONFIG — fill these in ─────────────────────────────────────────────────
+const RENDER_URL   = "https://video-downloader-bot-b040.onrender.com";
+const API_SECRET   = "mybotdownloader123";       // same one you set on Render
+const DRIVE_FOLDER = "1D8f6_l6M1TJdeGhsy81zjcEMwGHpJZaA";  // the folder ID from Step 1D
+// ──────────────────────────────────────────────────────────────────────────
+
+// Called when the add-on opens in Gmail
 function buildAddOn(e) {
-  var card = CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle("Save Video to Drive"));
+  return buildCard("", "", null);
+}
 
-  var section = CardService.newCardSection();
+function buildCard(url, statusMsg, jobId) {
+  var card    = CardService.newCardBuilder();
+  var section = CardService.newCardSection().setHeader("🎬 Video Downloader");
 
+  // URL input
   var urlInput = CardService.newTextInput()
-    .setFieldName("videoUrl")
-    .setTitle("Video URL (required)");
+    .setFieldName("video_url")
+    .setTitle("Paste video link")
+    .setHint("YouTube, m3u8, Cisco NetAcad, etc.")
+    .setValue(url || "");
 
-  var nameInput = CardService.newTextInput()
-    .setFieldName("fileName")
-    .setTitle("File Name (optional)");
+  // Optional cookies file ID input
+  var cookiesInput = CardService.newTextInput()
+    .setFieldName("cookies_file_id")
+    .setTitle("Cookies file ID (optional)")
+    .setHint("Drive file ID of your cookies.txt (for protected sites)");
 
-  var action = CardService.newAction().setFunctionName("handleDownload");
-  var button = CardService.newTextButton()
-    .setText("Download to Drive")
-    .setOnClickAction(action)
-    .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
+  // Download button
+  var downloadBtn = CardService.newTextButton()
+    .setText("⬇️ Download Video")
+    .setOnClickAction(
+      CardService.newAction().setFunctionName("onDownloadClick")
+    );
+
+  // Check status button (only show if we have a job)
+  var statusSection = CardService.newCardSection().setHeader("📊 Status");
+  var statusText = CardService.newTextParagraph()
+    .setText(statusMsg || "No job running yet.");
 
   section.addWidget(urlInput);
-  section.addWidget(nameInput);
-  section.addWidget(button);
-  
+  section.addWidget(cookiesInput);
+  section.addWidget(downloadBtn);
+  statusSection.addWidget(statusText);
+
+  // If there's a running job, show a Check Status button
+  if (jobId) {
+    var checkBtn = CardService.newTextButton()
+      .setText("🔄 Check Status")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("onCheckStatus")
+          .setParameters({ job_id: jobId })
+      );
+    statusSection.addWidget(checkBtn);
+  }
+
   card.addSection(section);
+  card.addSection(statusSection);
   return card.build();
 }
 
-// 2. Handles the button click in Gmail
-function handleDownload(e) {
-  var url = e.formInput.videoUrl;
-  var name = e.formInput.fileName || "downloaded_video.mp4";
+// ── Download button clicked ────────────────────────────────────────────────
+function onDownloadClick(e) {
+  var url     = e.formInput.video_url.trim();
+  var cookies = e.formInput.cookies_file_id
+              ? e.formInput.cookies_file_id.trim()
+              : "";
 
   if (!url) {
     return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("Please enter a valid URL."))
+      .setNotification(CardService.newNotification().setText("⚠️ Please paste a video URL first."))
       .build();
   }
 
-  // Call our core download function
-  var result = processVideoDownload(url, name);
-
-  if (result.success) {
-    // Build a success screen with a link to open the file
-    var openLink = CardService.newOpenLink().setUrl(result.fileUrl);
-    var viewButton = CardService.newTextButton()
-      .setText("Open in Drive")
-      .setOpenLink(openLink);
-
-    var successSection = CardService.newCardSection()
-      .addWidget(CardService.newTextParagraph().setText("✅ Successfully saved to your Drive!"))
-      .addWidget(viewButton);
-
-    var successCard = CardService.newCardBuilder().addSection(successSection).build();
-
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().pushCard(successCard))
-      .build();
-  } else {
-    // Show a popup notification if it fails
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Error: " + result.error))
-      .build();
-  }
-}
-
-// 3. Keeps the API working for your Render Server
-function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
-    const result = processVideoDownload(data.videoUrl, data.fileName || "downloaded_video.mp4");
-    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
+    var payload = {
+      url:             url,
+      folder_id:       DRIVE_FOLDER,
+      secret:          API_SECRET,
+      cookies_file_id: cookies
+    };
 
-// 4. The Core Download Logic (Used by both Gmail and Render)
-function processVideoDownload(videoUrl, fileName) {
-  try {
-    let finalDownloadUrl = videoUrl;
-    let finalFileName = fileName || "downloaded_video.mp4";
-    
-    // We use this flag if Render is sending us the raw video directly (m3u8)
-    let isDirectStream = false; 
-    let finalBlob = null;
+    var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
+      method:      "post",
+      contentType: "application/json",
+      payload:     JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
 
-    // 1. YOUTUBE LOGIC
-    if (videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be")) {
-      const renderApiUrl = "https://cloud-video-bot.onrender.com/api/extract-youtube"; 
-      const renderResponse = UrlFetchApp.fetch(renderApiUrl, {
-        method: "post",
-        contentType: "application/json",
-        payload: JSON.stringify({ url: videoUrl }),
-        muteHttpExceptions: true
-      });
+    var code = response.getResponseCode();
+    var body = JSON.parse(response.getContentText());
 
-      const renderData = JSON.parse(renderResponse.getContentText());
-      if (!renderData.success) return { success: false, error: renderData.error };
-      
-      finalDownloadUrl = renderData.rawVideoUrl;
-      if (!fileName) finalFileName = renderData.title + ".mp4"; 
-    }
-    
-    // 2. M3U8 LOGIC
-    else if (videoUrl.includes(".m3u8")) {
-      const renderApiUrl = "https://cloud-video-bot.onrender.com/api/convert-m3u8";
-      
-      // Call Render and wait for it to stitch and send back the actual video file
-      const renderResponse = UrlFetchApp.fetch(renderApiUrl, {
-        method: "post",
-        contentType: "application/json",
-        payload: JSON.stringify({ url: videoUrl }),
-        muteHttpExceptions: true
-      });
-
-      if (renderResponse.getResponseCode() !== 200) {
-        return { success: false, error: "Render failed to convert m3u8 stream." };
-      }
-
-      finalBlob = renderResponse.getBlob().setName(finalFileName);
-      isDirectStream = true;
-    }
-
-    // 3. FINAL SAVE TO DRIVE
-    let file;
-    if (isDirectStream) {
-      // If it was m3u8, Render already handed us the video blob
-      file = DriveApp.createFile(finalBlob);
+    if (code === 202) {
+      var jobId = body.job_id;
+      var newCard = buildCard(url, "⏳ Download started! Click 'Check Status' to see progress.", jobId);
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(newCard))
+        .build();
     } else {
-      // If it was YouTube or a normal mp4, Apps Script downloads it now
-      const response = UrlFetchApp.fetch(finalDownloadUrl);
-      const blob = response.getBlob().setName(finalFileName);
-      file = DriveApp.createFile(blob);
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ Error: " + (body.error || "Unknown error")))
+        .build();
     }
-    
-    return { success: true, fileId: file.getId(), fileUrl: file.getUrl() };
-  } catch (error) {
-    return { success: false, error: error.toString() };
+
+  } catch (err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("❌ Failed to reach server: " + err.message))
+      .build();
+  }
+}
+
+// ── Check Status button clicked ────────────────────────────────────────────
+function onCheckStatus(e) {
+  var jobId = e.parameters.job_id;
+
+  try {
+    var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {
+      muteHttpExceptions: true
+    });
+    var body = JSON.parse(response.getContentText());
+
+    var msg = "";
+    if (body.status === "done") {
+      msg = "✅ Done!\n";
+      (body.files || []).forEach(function(f) {
+        msg += "📁 " + f.name + "\n🔗 " + f.link + "\n\n";
+      });
+    } else if (body.status === "error") {
+      msg = "❌ Error: " + body.message;
+    } else {
+      msg = "⏳ " + body.message;
+    }
+
+    var newCard = buildCard("", msg, body.status === "done" ? null : jobId);
+    return CardService.newActionResponseBuilder()
+      .setNavigation(CardService.newNavigation().updateCard(newCard))
+      .build();
+
+  } catch (err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("❌ Could not check status: " + err.message))
+      .build();
   }
 }
