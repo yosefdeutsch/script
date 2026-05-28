@@ -1,7 +1,7 @@
 // ── CONFIG ─────────────────────────────────────────────────────────────────
 const RENDER_URL   = "https://video-downloader-bot-b040.onrender.com";
-const API_SECRET   = "mybotdownloader123";
-const DRIVE_FOLDER = "1D8f6_l6M1TJdeGhsy81zjcEMwGHpJZaA";
+const API_SECRET   = "YOUR_API_SECRET";
+const DRIVE_FOLDER = "YOUR_DRIVE_FOLDER_ID";
 // ──────────────────────────────────────────────────────────────────────────
 
 function buildAddOn(e) {
