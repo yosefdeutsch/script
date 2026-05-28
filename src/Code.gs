@@ -197,7 +197,7 @@ function onCheckStatus(e) {
   }
 }
 function checkFormats() {
-  var cookiesFileId = "13FnXFn7pY3nagQsQLuNiO_C1foURaj2d";
+  var cookiesFileId = "1wMDnAvE6a3VvajlJb3E038OSo_EiI9E7";
   var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
   
   var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
