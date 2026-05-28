@@ -196,5 +196,9 @@ function onCheckStatus(e) {
     return CardService.newActionResponseBuilder()
       .setNavigation(CardService.newNavigation().updateCard(buildCard("", savedMsg, null, "", "best", "no")))
       .build();
+  } catch(err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
+      .build();
   }
 }
