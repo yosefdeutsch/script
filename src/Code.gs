@@ -143,3 +143,8 @@ function onCheckStatus(e) {
       .build();
   }
 }
+function checkJobManually() {
+  var jobId = "d925a1a3-b8bb-491e-81cf-75fd66c8755f";
+  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  Logger.log(response.getContentText());
+}
