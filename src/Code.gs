@@ -1,10 +1,9 @@
-// ── CONFIG — fill these in ─────────────────────────────────────────────────
+// ── CONFIG ─────────────────────────────────────────────────────────────────
 const RENDER_URL   = "https://video-downloader-bot-b040.onrender.com";
-const API_SECRET   = "mybotdownloader123";       // same one you set on Render
-const DRIVE_FOLDER = "1D8f6_l6M1TJdeGhsy81zjcEMwGHpJZaA";  // the folder ID from Step 1D
+const API_SECRET   = "YOUR_API_SECRET";
+const DRIVE_FOLDER = "YOUR_DRIVE_FOLDER_ID";
 // ──────────────────────────────────────────────────────────────────────────
 
-// Called when the add-on opens in Gmail
 function buildAddOn(e) {
   return buildCard("", "", null);
 }
@@ -13,40 +12,32 @@ function buildCard(url, statusMsg, jobId) {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("🎬 Video Downloader");
 
-  // URL input
   var urlInput = CardService.newTextInput()
     .setFieldName("video_url")
     .setTitle("Paste video link")
     .setHint("YouTube, m3u8, Cisco NetAcad, etc.")
     .setValue(url || "");
 
-  // Optional cookies file ID input
   var cookiesInput = CardService.newTextInput()
     .setFieldName("cookies_file_id")
-    .setTitle("Cookies file ID (optional)")
-    .setHint("Drive file ID of your cookies.txt (for protected sites)");
+    .setTitle("Cookies file ID in Drive (optional)")
+    .setHint("For protected sites like Cisco NetAcad");
 
-  // Download button
   var downloadBtn = CardService.newTextButton()
     .setText("⬇️ Download Video")
-    .setOnClickAction(
-      CardService.newAction().setFunctionName("onDownloadClick")
-    );
+    .setOnClickAction(CardService.newAction().setFunctionName("onDownloadClick"));
 
-  // Check status button (only show if we have a job)
   var statusSection = CardService.newCardSection().setHeader("📊 Status");
-  var statusText = CardService.newTextParagraph()
-    .setText(statusMsg || "No job running yet.");
+  var statusText    = CardService.newTextParagraph().setText(statusMsg || "No job running yet.");
 
   section.addWidget(urlInput);
   section.addWidget(cookiesInput);
   section.addWidget(downloadBtn);
   statusSection.addWidget(statusText);
 
-  // If there's a running job, show a Check Status button
   if (jobId) {
     var checkBtn = CardService.newTextButton()
-      .setText("🔄 Check Status")
+      .setText("🔄 Check Status & Save to Drive")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
@@ -60,31 +51,40 @@ function buildCard(url, statusMsg, jobId) {
   return card.build();
 }
 
-// ── Download button clicked ────────────────────────────────────────────────
+// ── Download button ────────────────────────────────────────────────────────
 function onDownloadClick(e) {
-  var url     = e.formInput.video_url.trim();
-  var cookies = e.formInput.cookies_file_id
-              ? e.formInput.cookies_file_id.trim()
-              : "";
-
+  var url           = e.formInput.video_url.trim();
+  var cookiesFileId = e.formInput.cookies_file_id
+                    ? e.formInput.cookies_file_id.trim() : "";
   if (!url) {
     return CardService.newActionResponseBuilder()
       .setNotification(CardService.newNotification().setText("⚠️ Please paste a video URL first."))
       .build();
   }
 
+  // If cookies file ID provided, read the file content from Drive
+  var cookiesContent = "";
+  if (cookiesFileId) {
+    try {
+      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+    } catch(err) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ Could not read cookies file: " + err.message))
+        .build();
+    }
+  }
+
   try {
     var payload = {
       url:             url,
-      folder_id:       DRIVE_FOLDER,
       secret:          API_SECRET,
-      cookies_file_id: cookies
+      cookies_content: cookiesContent
     };
 
     var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
-      method:      "post",
-      contentType: "application/json",
-      payload:     JSON.stringify(payload),
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify(payload),
       muteHttpExceptions: true
     });
 
@@ -92,59 +92,76 @@ function onDownloadClick(e) {
     var body = JSON.parse(response.getContentText());
 
     if (code === 202) {
-      var jobId = body.job_id;
-      var newCard = buildCard(url, "⏳ Download started! Click 'Check Status' to see progress.", jobId);
+      var newCard = buildCard(url, "⏳ Download started! Wait ~1 min then click 'Check Status & Save to Drive'.", body.job_id);
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(newCard))
         .build();
     } else {
       return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Error: " + (body.error || "Unknown error")))
+        .setNotification(CardService.newNotification().setText("❌ Error: " + (body.error || "Unknown")))
         .build();
     }
-
-  } catch (err) {
+  } catch(err) {
     return CardService.newActionResponseBuilder()
       .setNotification(CardService.newNotification().setText("❌ Failed to reach server: " + err.message))
       .build();
   }
 }
 
-// ── Check Status button clicked ────────────────────────────────────────────
+// ── Check Status & Save ────────────────────────────────────────────────────
 function onCheckStatus(e) {
   var jobId = e.parameters.job_id;
 
   try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {
+    // 1. Check status
+    var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {
       muteHttpExceptions: true
     });
-    var body = JSON.parse(response.getContentText());
+    var job = JSON.parse(statusRes.getContentText());
 
-    var msg = "";
-    if (body.status === "done") {
-      msg = "✅ Done!\n";
-      (body.files || []).forEach(function(f) {
-        msg += "📁 " + f.name + "\n🔗 " + f.link + "\n\n";
-      });
-    } else if (body.status === "error") {
-      msg = "❌ Error: " + body.message;
-    } else {
-      msg = "⏳ " + body.message;
+    if (job.status === "error") {
+      var newCard = buildCard("", "❌ " + job.message, null);
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(newCard))
+        .build();
     }
 
-    var newCard = buildCard("", msg, body.status === "done" ? null : jobId);
+    if (job.status !== "done") {
+      var newCard = buildCard("", "⏳ Still working: " + job.message, jobId);
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(newCard))
+        .build();
+    }
+
+    // 2. Fetch the video file from Render
+    var fileRes = UrlFetchApp.fetch(
+      RENDER_URL + "/result/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
+      { muteHttpExceptions: true }
+    );
+
+    if (fileRes.getResponseCode() !== 200) {
+      var newCard = buildCard("", "❌ Could not fetch file from server.", null);
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(newCard))
+        .build();
+    }
+
+    // 3. Save to Drive
+    var blob     = fileRes.getBlob();
+    var fileName = blob.getName() || ("video_" + jobId + ".mp4");
+    blob.setName(fileName);
+
+    var folder = DriveApp.getFolderById(DRIVE_FOLDER);
+    var saved  = folder.createFile(blob);
+
+    var newCard = buildCard("", "✅ Saved to Drive!\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl(), null);
     return CardService.newActionResponseBuilder()
       .setNavigation(CardService.newNavigation().updateCard(newCard))
       .build();
 
-  } catch (err) {
+  } catch(err) {
     return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Could not check status: " + err.message))
+      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
       .build();
   }
-}
-function checkJobManually() {
-  var jobId = "d925a1a3-b8bb-491e-81cf-75fd66c8755f";
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
-  Logger.log(response.getContentText());
 }
