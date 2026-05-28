@@ -160,51 +160,41 @@ function onCheckStatus(e) {
         .build();
     }
 
-    // Get file list from server
-    var filesRes  = UrlFetchApp.fetch(
-      RENDER_URL + "/result_info/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
+    var fileRes = UrlFetchApp.fetch(
+      RENDER_URL + "/result_zip/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
       { muteHttpExceptions: true }
     );
-    var filesInfo = JSON.parse(filesRes.getContentText());
-    var fileNames = filesInfo.files || [];
 
-    var folder   = DriveApp.getFolderById(DRIVE_FOLDER);
-    var savedMsg = "✅ Saved to Drive!\n\n";
+    if (fileRes.getResponseCode() !== 200) {
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(buildCard("", "❌ Could not fetch file from server.", null, "", "best", "no")))
+        .build();
+    }
 
-    for (var i = 0; i < fileNames.length; i++) {
-      var fileRes = UrlFetchApp.fetch(
-        RENDER_URL + "/result_file/" + jobId + "/" + encodeURIComponent(fileNames[i]) + "?secret=" + encodeURIComponent(API_SECRET),
-        { muteHttpExceptions: true }
-      );
+    var folder      = DriveApp.getFolderById(DRIVE_FOLDER);
+    var blob        = fileRes.getBlob();
+    var contentType = fileRes.getHeaders()["Content-Type"] || "";
+    var isZip       = contentType.indexOf("zip") !== -1 || blob.getName().indexOf(".zip") !== -1;
 
-      if (fileRes.getResponseCode() === 200) {
-        var blob = fileRes.getBlob();
+    var finalName;
+    if (isZip) {
+      finalName = (customName || "video_parts") + ".zip";
+    } else {
+      finalName = customName
+        ? customName.replace(/\.mp4$/i, "") + ".mp4"
+        : (blob.getName() || "video.mp4");
+    }
 
-        // Apply custom name
-        var baseName;
-        if (customName && fileNames.length === 1) {
-          baseName = customName.replace(/\.mp4$/i, "") + ".mp4";
-        } else if (customName && fileNames.length > 1) {
-          baseName = customName.replace(/\.mp4$/i, "") + "_part" + (i + 1) + ".mp4";
-        } else {
-          baseName = fileNames[i];
-        }
+    blob.setName(finalName);
+    var saved    = folder.createFile(blob);
+    var savedMsg = "✅ Saved to Drive!\n\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
 
-        blob.setName(baseName);
-        var saved = folder.createFile(blob);
-
-        // Show name + clickable Drive link
-        savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
-      }
+    if (isZip) {
+      savedMsg += "\n\n📦 Zip file with all video parts inside.\nExtract it to get the mp4 files.";
     }
 
     return CardService.newActionResponseBuilder()
       .setNavigation(CardService.newNavigation().updateCard(buildCard("", savedMsg, null, "", "best", "no")))
-      .build();
-
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
       .build();
   }
 }
