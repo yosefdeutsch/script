@@ -180,12 +180,16 @@ function onCheckStatus(e) {
   }
 }
 function checkFormats() {
+  var cookiesFileId = "13eXZwiZVHG0I1aa-ph4uyRTrtkBEyCVn";
+  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+  
   var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
       secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+      url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+      cookies_content: cookiesContent
     })
   });
   Logger.log(response.getContentText());
