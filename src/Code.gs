@@ -29,7 +29,7 @@ function buildCard(url, statusMsg, jobId, customName, highQuality) {
     .setTitle("Cookies file ID in Drive (optional)")
     .setHint("For protected sites like Cisco NetAcad");
 
-  // High Quality Option using DecoratedText + Switch
+  // High Quality Option
   var highQualitySwitch = CardService.newSwitch()
     .setFieldName("high_quality")
     .setValue(highQuality ? "true" : "false")
@@ -38,7 +38,7 @@ function buildCard(url, statusMsg, jobId, customName, highQuality) {
   var highQualityDecorated = CardService.newDecoratedText()
     .setText("🌟 High Quality (Best Video + Best Audio)")
     .setWrapText(true)
-    .setSwitch(highQualitySwitch);
+    .setSwitchControl(highQualitySwitch);   // ← Fixed: setSwitchControl
 
   var downloadBtn = CardService.newTextButton()
     .setText("⬇️ Download Video")
@@ -50,7 +50,7 @@ function buildCard(url, statusMsg, jobId, customName, highQuality) {
   section.addWidget(urlInput);
   section.addWidget(nameInput);
   section.addWidget(cookiesInput);
-  section.addWidget(highQualityDecorated);   // ← Fixed here
+  section.addWidget(highQualityDecorated);
   section.addWidget(downloadBtn);
 
   statusSection.addWidget(statusText);
