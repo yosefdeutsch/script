@@ -21,7 +21,7 @@ function buildCard(url, statusMsg, jobId, customName) {
   var nameInput = CardService.newTextInput()
     .setFieldName("custom_name")
     .setTitle("File name (optional)")
-    .setHint("Leave empty to use original title. No need to add .mp4")
+    .setHint("Leave empty to use original title.")
     .setValue(customName || "");
 
   var cookiesInput = CardService.newTextInput()
