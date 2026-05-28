@@ -179,3 +179,14 @@ function onCheckStatus(e) {
       .build();
   }
 }
+function checkFormats() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret: API_SECRET,
+      url: "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+    })
+  });
+  Logger.log(response.getContentText());
+}
