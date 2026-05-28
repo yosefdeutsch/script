@@ -18,6 +18,12 @@ function buildCard(url, statusMsg, jobId, customName, quality, splitVideo) {
     .setHint("YouTube, m3u8, Cisco NetAcad, etc.")
     .setValue(url || "");
 
+  // Cookies right below URL
+  var cookiesInput = CardService.newTextInput()
+    .setFieldName("cookies_file_id")
+    .setTitle("Cookies file ID in Drive (optional)")
+    .setHint("For protected sites like Cisco NetAcad or YouTube");
+
   var nameInput = CardService.newTextInput()
     .setFieldName("custom_name")
     .setTitle("File name (optional)")
@@ -28,21 +34,16 @@ function buildCard(url, statusMsg, jobId, customName, quality, splitVideo) {
     .setType(CardService.SelectionInputType.DROPDOWN)
     .setTitle("Quality")
     .setFieldName("quality")
-    .addItem("🏆 Best available",  "best",   (quality || "best") === "best")
-    .addItem("📺 1080p",           "1080",   quality === "1080")
-    .addItem("📺 720p",            "720",    quality === "720")
-    .addItem("📺 480p",            "480",    quality === "480")
-    .addItem("📺 360p (smallest)", "360",    quality === "360");
+    .addItem("🏆 Best available",  "best", (quality || "best") === "best")
+    .addItem("📺 1080p",           "1080", quality === "1080")
+    .addItem("📺 720p",            "720",  quality === "720")
+    .addItem("📺 480p",            "480",  quality === "480")
+    .addItem("📺 360p (smallest)", "360",  quality === "360");
 
   var splitSwitch = CardService.newSelectionInput()
     .setType(CardService.SelectionInputType.CHECK_BOX)
     .setFieldName("split_video")
     .addItem("✂️ Split into parts if file is large (every 45MB)", "yes", splitVideo === "yes");
-
-  var cookiesInput = CardService.newTextInput()
-    .setFieldName("cookies_file_id")
-    .setTitle("Cookies file ID in Drive (optional)")
-    .setHint("For protected sites like Cisco NetAcad");
 
   var downloadBtn = CardService.newTextButton()
     .setText("⬇️ Download Video")
@@ -51,11 +52,12 @@ function buildCard(url, statusMsg, jobId, customName, quality, splitVideo) {
   var statusSection = CardService.newCardSection().setHeader("📊 Status");
   var statusText    = CardService.newTextParagraph().setText(statusMsg || "No job running yet.");
 
+  // Order: URL → Cookies → File name → Quality → Split → Button
   section.addWidget(urlInput);
+  section.addWidget(cookiesInput);
   section.addWidget(nameInput);
   section.addWidget(qualitySelect);
   section.addWidget(splitSwitch);
-  section.addWidget(cookiesInput);
   section.addWidget(downloadBtn);
   statusSection.addWidget(statusText);
 
@@ -144,7 +146,7 @@ function onCheckStatus(e) {
 
   try {
     var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-    var job = JSON.parse(statusRes.getContentText());
+    var job       = JSON.parse(statusRes.getContentText());
 
     if (job.status === "error") {
       return CardService.newActionResponseBuilder()
@@ -158,8 +160,8 @@ function onCheckStatus(e) {
         .build();
     }
 
-    // Fetch file list from server
-    var filesRes = UrlFetchApp.fetch(
+    // Get file list from server
+    var filesRes  = UrlFetchApp.fetch(
       RENDER_URL + "/result_info/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
       { muteHttpExceptions: true }
     );
@@ -167,7 +169,7 @@ function onCheckStatus(e) {
     var fileNames = filesInfo.files || [];
 
     var folder   = DriveApp.getFolderById(DRIVE_FOLDER);
-    var savedMsg = "✅ Saved to Drive!\n";
+    var savedMsg = "✅ Saved to Drive!\n\n";
 
     for (var i = 0; i < fileNames.length; i++) {
       var fileRes = UrlFetchApp.fetch(
@@ -176,13 +178,23 @@ function onCheckStatus(e) {
       );
 
       if (fileRes.getResponseCode() === 200) {
-        var blob     = fileRes.getBlob();
-        var baseName = customName && fileNames.length === 1
-                     ? customName.replace(/\.mp4$/i, "") + ".mp4"
-                     : fileNames[i];
+        var blob = fileRes.getBlob();
+
+        // Apply custom name
+        var baseName;
+        if (customName && fileNames.length === 1) {
+          baseName = customName.replace(/\.mp4$/i, "") + ".mp4";
+        } else if (customName && fileNames.length > 1) {
+          baseName = customName.replace(/\.mp4$/i, "") + "_part" + (i + 1) + ".mp4";
+        } else {
+          baseName = fileNames[i];
+        }
+
         blob.setName(baseName);
         var saved = folder.createFile(blob);
-        savedMsg += "📁 " + saved.getName() + "\n";
+
+        // Show name + clickable Drive link
+        savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
       }
     }
 
@@ -195,19 +207,4 @@ function onCheckStatus(e) {
       .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
       .build();
   }
-}
-function checkFormats() {
-  var cookiesFileId = "1wMDnAvE6a3VvajlJb3E038OSo_EiI9E7";
-  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=YxLx8T4_a_U",
-      cookies_content: cookiesContent
-    })
-  });
-  Logger.log(response.getContentText());
 }
