@@ -236,14 +236,16 @@ function debugZip() {
   Logger.log(response.getContentText());
 }
 function checkFileSize() {
-  var url = "https://www.youtube.com/watch?v=YxLx8T4_a_U";
+  var cookiesFileId  = "10t_ROlcR3QPdVpc4-iU1ipXku9tUyead";
+  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+  
   var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
-      secret: API_SECRET,
-      url: url,
-      cookies_content: ""
+      secret:          API_SECRET,
+      url:             "https://www.youtube.com/watch?v=YxLx8T4_a_U",
+      cookies_content: cookiesContent
     })
   });
   Logger.log(response.getContentText());
