@@ -249,8 +249,7 @@ function onDownloadFormat(e) {
 
 // ── Check Status & Save ────────────────────────────────────────────────────
 function onCheckStatus(e) {
-  var jobId      = e.parameters.job_id;
-  var startPart  = parseInt(e.parameters.start_part || "0");
+  var jobId = e.parameters.job_id;
 
   try {
     var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
@@ -268,19 +267,12 @@ function onCheckStatus(e) {
         .build();
     }
 
-    // Get total parts
-    var countRes   = UrlFetchApp.fetch(
-      RENDER_URL + "/parts_count/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
-      { muteHttpExceptions: true }
-    );
-    var countData  = JSON.parse(countRes.getContentText());
-    var totalParts = countData.total || 1;
+    // Fetch each part and save to Drive
+    var totalParts = job.parts || 1;
     var folder     = DriveApp.getFolderById(DRIVE_FOLDER);
-    var savedMsg   = "";
-    var batchSize  = 3; // fetch 3 parts per button click to avoid timeout
-    var endPart    = Math.min(startPart + batchSize, totalParts);
+    var savedMsg   = "✅ Saved to Drive!\n\n";
 
-    for (var i = startPart; i < endPart; i++) {
+    for (var i = 0; i < totalParts; i++) {
       var partRes = UrlFetchApp.fetch(
         RENDER_URL + "/part/" + jobId + "/" + i + "?secret=" + encodeURIComponent(API_SECRET),
         { muteHttpExceptions: true }
@@ -291,12 +283,16 @@ function onCheckStatus(e) {
         continue;
       }
 
-      var blob        = partRes.getBlob();
-      var headers     = partRes.getHeaders();
+      var blob     = partRes.getBlob();
+      var headers  = partRes.getHeaders();
+      var fname    = "video_part" + (i+1) + ".mp4";
+
+      // Extract filename from Content-Disposition header
       var disposition = headers["Content-Disposition"] || headers["content-disposition"] || "";
-      var fname       = "video_part" + String(i+1).padStart(3,"0") + ".mp4";
-      var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-      if (match) fname = match[1].replace(/['"]/g, "").trim();
+      var match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+      if (match) {
+        fname = match[1].replace(/['"]/g, "").trim();
+      }
 
       blob.setName(fname);
       blob.setContentType("video/mp4");
@@ -304,40 +300,9 @@ function onCheckStatus(e) {
       savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
     }
 
-    // Check if more parts remain
-    if (endPart < totalParts) {
-      var remaining = totalParts - endPart;
-      savedMsg += "✅ Parts " + (startPart+1) + "–" + endPart + " saved!\n⏳ " + remaining + " more part(s) remaining.\nClick 'Save Next Parts' to continue.";
-      var card = buildStatusCard(savedMsg, null);
-
-      // Add "Save Next Parts" button
-      var nextBtn = CardService.newTextButton()
-        .setText("💾 Save Next " + Math.min(batchSize, remaining) + " Parts")
-        .setOnClickAction(
-          CardService.newAction()
-            .setFunctionName("onCheckStatus")
-            .setParameters({ job_id: jobId, start_part: String(endPart) })
-        );
-
-      // Rebuild card with extra button — use updateCard with new card
-      var cardBuilder   = CardService.newCardBuilder();
-      var statusSection = CardService.newCardSection().setHeader("📊 Status");
-      statusSection.addWidget(CardService.newTextParagraph().setText(savedMsg));
-      statusSection.addWidget(nextBtn);
-      var newBtn = CardService.newTextButton()
-        .setText("⬇️ Download Another Video")
-        .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-      statusSection.addWidget(newBtn);
-      cardBuilder.addSection(statusSection);
-
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(cardBuilder.build()))
-        .build();
+    if (totalParts > 1) {
+      savedMsg += "📦 " + totalParts + " parts — play them in order.";
     }
-
-    // All done
-    savedMsg = "✅ All " + totalParts + " part(s) saved to Drive!\n\n" + savedMsg;
-    if (totalParts > 1) savedMsg += "📦 Play parts in order (part001, part002…)";
 
     return CardService.newActionResponseBuilder()
       .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(savedMsg, null)))
