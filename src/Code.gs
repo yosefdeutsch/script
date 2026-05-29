@@ -16,7 +16,7 @@ function buildMainCard(url, statusMsg) {
   var urlInput = CardService.newTextInput()
     .setFieldName("video_url")
     .setTitle("Paste video link")
-    .setHint("YouTube.")
+    .setHint("YouTube link.")
     .setValue(url || "");
 
   var cookiesInput = CardService.newTextInput()
