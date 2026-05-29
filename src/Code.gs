@@ -279,3 +279,8 @@ function onCheckStatus(e) {
       .build();
   }
 }
+function checkLastJob() {
+  var jobId = "PASTE_YOUR_LAST_JOB_ID_HERE";
+  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  Logger.log(response.getContentText());
+}
