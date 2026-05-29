@@ -1,321 +1,241 @@
-// ── CONFIG ─────────────────────────────────────────────────────────────────
-const RENDER_URL   = "https://youtube-downloader-bot-7bim.onrender.com";
-const API_SECRET   = "mybotdownloader123";
-const DRIVE_FOLDER = "1uyvFqXejRjamnKFGKMGT1lhYqvDO9Acb";
-// ──────────────────────────────────────────────────────────────────────────
+/**
+ * --- CONFIGURATION & TRANSLATIONS ---
+ */
+const THEME = {
+  color: "#009688", // Greenish-Bluish Teal
+  icon: "https://cdn-icons-png.flaticon.com/512/3342/3342137.png"
+};
 
-function buildAddOn(e) {
-  return buildMainCard("", "");
+// Using Unicode formatting characters to strongly suggest RTL rendering for the text itself
+const RTL = '\u202B'; 
+const POP = '\u202C';
+
+const TEXT = {
+  en: {
+    title: "Image Sender",
+    subtitle: "Share images instantly",
+    urlLabel: "Image Link",
+    urlHint: "Paste URL or Base64 here...",
+    btnInbox: "Send to My Inbox",
+    btnOther: "Send to Someone Else",
+    btnLang: "🌐 Switch to עברית",
+    otherTitle: "Recipient Details",
+    emailLabel: "Recipient Email",
+    btnSend: "Send Now",
+    btnBack: "Go Back",
+    success: "Success! Image sent.",
+    error: "Error: ",
+    invalidUrl: "Please provide a valid link.",
+    invalidEmail: "Invalid email address.",
+    errBlob: "Cannot read 'blob:' links. Please copy the actual Image Address or use Base64.",
+    subject: "Shared Image",
+    body: "Attached is the image you shared via the Image Sender add-on."
+  },
+  he: {
+    title: RTL + "שולח התמונות" + POP,
+    subtitle: RTL + "שתף תמונות ברגע" + POP,
+    urlLabel: RTL + "קישור לתמונה" + POP,
+    urlHint: RTL + "הדבק קישור או Base64 כאן..." + POP,
+    btnInbox: RTL + "שלח לתיבה שלי" + POP,
+    btnOther: RTL + "שלח לאדם אחר" + POP,
+    btnLang: "🌐 Switch to English",
+    otherTitle: RTL + "פרטי הנמען" + POP,
+    emailLabel: RTL + "אימייל הנמען" + POP,
+    btnSend: RTL + "שלח עכשיו" + POP,
+    btnBack: RTL + "חזור" + POP,
+    success: RTL + "הצליח! התמונה נשלחה." + POP,
+    error: RTL + "שגיאה: " + POP,
+    invalidUrl: RTL + "אנא ספק קישור תקין." + POP,
+    invalidEmail: RTL + "כתובת אימייל לא תקינה." + POP,
+    errBlob: RTL + "לא ניתן לקרוא קישורי 'blob:'. אנא העתק את כתובת התמונה המקורית או השתמש ב-Base64." + POP,
+    subject: RTL + "תמונה ששותפה איתך" + POP,
+    body: RTL + "מצורפת התמונה ששותפה דרך תוסף שולח התמונות." + POP
+  }
+};
+
+/**
+ * --- UI BUILDERS ---
+ */
+
+function getLang() {
+  return PropertiesService.getUserProperties().getProperty('LANG') || 'en';
 }
 
-// ── Main card: URL input + Get Formats button ──────────────────────────────
-function buildMainCard(url, statusMsg) {
-  var card    = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("🎬 YouTube Downloader");
+function buildHomepage(e) {
+  return createMainCard(e);
+}
 
+function createMainCard(e) {
+  var lang = getLang();
+  var t = TEXT[lang];
+  var card = CardService.newCardBuilder();
+
+  // 1. Visual Header
+  var header = CardService.newCardHeader()
+    .setTitle(t.title)
+    .setSubtitle(t.subtitle)
+    .setImageStyle(CardService.ImageStyle.CIRCLE)
+    .setImageUrl(THEME.icon);
+  card.setHeader(header);
+
+  // 2. Input Section
+  var inputSection = CardService.newCardSection();
   var urlInput = CardService.newTextInput()
-    .setFieldName("video_url")
-    .setTitle("Paste video link")
-    .setHint("YouTube link.")
-    .setValue(url || "");
+    .setFieldName("imageUrl")
+    .setTitle(t.urlLabel)
+    .setHint(t.urlHint);
+  inputSection.addWidget(urlInput);
+  card.addSection(inputSection);
 
-  var cookiesInput = CardService.newTextInput()
-    .setFieldName("cookies_file_id")
-    .setTitle("Cookies file ID in Drive (optional)")
-    .setHint("For protected sites like YouTube");
+  // 3. Actions Section (Stacked Vertically for cleaner UI)
+  var actionSection = CardService.newCardSection();
 
-  var nameInput = CardService.newTextInput()
-    .setFieldName("custom_name")
-    .setTitle("File name (optional)")
-    .setHint("Leave empty to use original title");
+  var selfAction = CardService.newAction().setFunctionName("processImage").setParameters({target: "self"});
+  var selfBtn = CardService.newTextButton()
+    .setText(t.btnInbox)
+    .setOnClickAction(selfAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED); // Primary colored button
+  
+  var otherAction = CardService.newAction().setFunctionName("buildOtherCard");
+  var otherBtn = CardService.newTextButton()
+    .setText(t.btnOther)
+    .setOnClickAction(otherAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.TEXT); // Secondary clean text button
 
-  var getFormatsBtn = CardService.newTextButton()
-    .setText("🔍 Get Available Formats")
-    .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
+  // Adding them sequentially creates a clean vertical stack
+  actionSection.addWidget(selfBtn);
+  actionSection.addWidget(otherBtn);
+  card.addSection(actionSection);
 
-  var statusSection = CardService.newCardSection().setHeader("📊 Status");
-  var statusText    = CardService.newTextParagraph().setText(statusMsg || "Paste a link and click Get Formats.");
+  // 4. Fixed Footer (Pinned to the absolute bottom)
+  var langAction = CardService.newAction().setFunctionName("toggleLanguage");
+  var footer = CardService.newFixedFooter()
+    .setPrimaryButton(CardService.newTextButton()
+      .setText(t.btnLang)
+      .setOnClickAction(langAction));
+  card.setFixedFooter(footer);
 
-  section.addWidget(urlInput);
-  section.addWidget(cookiesInput);
-  section.addWidget(nameInput);
-  section.addWidget(getFormatsBtn);
-  statusSection.addWidget(statusText);
-
-  card.addSection(section);
-  card.addSection(statusSection);
   return card.build();
 }
 
-// ── Format picker card ─────────────────────────────────────────────────────
-function buildFormatCard(url, cookiesFileId, customName, formats) {
-  var card    = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("📋 Choose Format");
+function buildOtherCard(e) {
+  var lang = getLang();
+  var t = TEXT[lang];
+  var currentUrl = e.formInput.imageUrl || "";
 
-  var formatSelect = CardService.newSelectionInput()
-    .setType(CardService.SelectionInputType.RADIO_BUTTON)
-    .setTitle("Available formats")
-    .setFieldName("format_id");
+  var card = CardService.newCardBuilder();
+  card.setHeader(CardService.newCardHeader().setTitle(t.otherTitle));
 
-  for (var i = 0; i < formats.length; i++) {
-    var f = formats[i];
-    formatSelect.addItem(f.label, f.id, i === 0);
-  }
+  var mainSection = CardService.newCardSection();
 
-  var downloadBtn = CardService.newTextButton()
-    .setText("⬇️ Download Selected Format")
-    .setOnClickAction(
-      CardService.newAction()
-        .setFunctionName("onDownloadFormat")
-        .setParameters({
-          url:            url,
-          cookies_file_id: cookiesFileId,
-          custom_name:    customName
-        })
-    );
+  // Retain the URL
+  mainSection.addWidget(CardService.newTextInput().setFieldName("imageUrl").setTitle(t.urlLabel).setValue(currentUrl));
 
+  // Recipient Input
+  mainSection.addWidget(CardService.newTextInput()
+    .setFieldName("recipientEmail")
+    .setTitle(t.emailLabel)
+    .setHint("example@mail.com"));
+  
+  card.addSection(mainSection);
+
+  // Actions Section (Stacked Vertically)
+  var actionSection = CardService.newCardSection();
+
+  var sendAction = CardService.newAction().setFunctionName("processImage").setParameters({target: "other"});
+  var sendBtn = CardService.newTextButton()
+    .setText(t.btnSend)
+    .setOnClickAction(sendAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
+
+  var backAction = CardService.newAction().setFunctionName("goBack");
   var backBtn = CardService.newTextButton()
-    .setText("← Back")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setText(t.btnBack)
+    .setOnClickAction(backAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.TEXT);
 
-  section.addWidget(formatSelect);
-  section.addWidget(downloadBtn);
-  section.addWidget(backBtn);
-  card.addSection(section);
-  return card.build();
+  actionSection.addWidget(sendBtn);
+  actionSection.addWidget(backBtn);
+  card.addSection(actionSection);
+
+  // Fixed Footer
+  var langAction = CardService.newAction().setFunctionName("toggleLanguage");
+  var footer = CardService.newFixedFooter()
+    .setPrimaryButton(CardService.newTextButton()
+      .setText(t.btnLang)
+      .setOnClickAction(langAction));
+  card.setFixedFooter(footer);
+
+  return CardService.newActionResponseBuilder().setNavigation(CardService.newNavigation().pushCard(card.build())).build();
 }
 
-// ── Status card ────────────────────────────────────────────────────────────
-function buildStatusCard(msg, jobId) {
-  var card          = CardService.newCardBuilder();
-  var statusSection = CardService.newCardSection().setHeader("📊 Status");
-  var statusText    = CardService.newTextParagraph().setText(msg || "Working…");
-  statusSection.addWidget(statusText);
+/**
+ * --- LOGIC & ENGINE ---
+ */
 
-  if (jobId) {
-    var checkBtn = CardService.newTextButton()
-      .setText("🔄 Check Status & Save to Drive")
-      .setOnClickAction(
-        CardService.newAction()
-          .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: jobId })
-      );
-    statusSection.addWidget(checkBtn);
-  }
-
-  var newBtn = CardService.newTextButton()
-    .setText("⬇️ Download Another Video")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  statusSection.addWidget(newBtn);
-
-  card.addSection(statusSection);
-  return card.build();
+function toggleLanguage() {
+  var props = PropertiesService.getUserProperties();
+  props.setProperty('LANG', getLang() === 'en' ? 'he' : 'en');
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().updateCard(createMainCard()))
+    .build();
 }
 
-// ── Get Formats button clicked ─────────────────────────────────────────────
-function onGetFormats(e) {
-  var url           = e.formInput.video_url.trim();
-  var cookiesFileId = e.formInput.cookies_file_id ? e.formInput.cookies_file_id.trim() : "";
-  var customName    = e.formInput.custom_name ? e.formInput.custom_name.trim() : "";
+function goBack() {
+  return CardService.newActionResponseBuilder().setNavigation(CardService.newNavigation().popCard()).build();
+}
 
-  if (!url) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("⚠️ Please paste a video URL first."))
-      .build();
+function processImage(e) {
+  var lang = getLang();
+  var t = TEXT[lang];
+  var imageUrl = e.formInput.imageUrl;
+  var target = e.parameters.target;
+  var recipient = Session.getActiveUser().getEmail();
+
+  if (!imageUrl) return createNotification(t.invalidUrl);
+  
+  // Explicitly catch and reject blob links with a helpful message
+  if (imageUrl.startsWith("blob:")) {
+    return createNotification(t.errBlob);
   }
 
-  var cookiesContent = "";
-  if (cookiesFileId) {
-    try {
-      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-    } catch(err) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Could not read cookies file: " + err.message))
-        .build();
-    }
+  if (target === "other") {
+    recipient = e.formInput.recipientEmail;
+    if (!recipient || recipient.indexOf("@") === -1) return createNotification(t.invalidEmail);
   }
 
   try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
-      muteHttpExceptions: true
-    });
-
-    var body = JSON.parse(response.getContentText());
-    var stdout = body.stdout || "";
-
-    if (!stdout || body.stderr) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Could not get formats: " + (body.stderr || "Unknown error").substring(0, 200)))
-        .build();
-    }
-
-    // Parse format lines
-    var formats = [];
-    var lines   = stdout.split("\n");
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim();
-      // Match lines starting with a format ID number
-      var match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+.*\|\s*([\d.]+\S+)\s+\S+\s+(\S+)/);
-      if (match) {
-        var id         = match[1];
-        var ext        = match[2];
-        var resolution = match[3];
-        var fps        = match[4];
-        var size       = match[5];
-        var proto      = match[6];
-        var label      = id + " | " + ext + " | " + resolution + " | " + size;
-        formats.push({ id: id, label: label });
-      }
-    }
-
-    // Also add "best" option at top
-    formats.unshift({ id: "best", label: "🏆 Best available (auto)" });
-
-    if (formats.length <= 1) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ No formats found. Try adding cookies."))
-        .build();
-    }
-
-    var newCard = buildFormatCard(url, cookiesFileId, customName, formats);
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(newCard))
-      .build();
-
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
-      .build();
-  }
-}
-
-// ── Download Selected Format ───────────────────────────────────────────────
-function onDownloadFormat(e) {
-  var formatId      = e.formInput.format_id;
-  var url           = e.parameters.url;
-  var cookiesFileId = e.parameters.cookies_file_id || "";
-  var customName    = e.parameters.custom_name || "";
-
-  var cookiesContent = "";
-  if (cookiesFileId) {
-    try {
-      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-    } catch(err) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Could not read cookies file: " + err.message))
-        .build();
-    }
-  }
-
-  try {
-    var payload = {
-      url:             url,
-      secret:          API_SECRET,
-      cookies_content: cookiesContent,
-      format_id:       formatId,
-      custom_name:     customName,
-      folder_id:       DRIVE_FOLDER
-    };
-
-    var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify(payload),
-      muteHttpExceptions: true
-    });
-
-    var code = response.getResponseCode();
-    var body = JSON.parse(response.getContentText());
-
-    if (code === 202) {
-      var newCard = buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", body.job_id);
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(newCard))
-        .build();
+    var blob;
+    // Check for Base64 Data
+    if (imageUrl.indexOf("base64,") > -1) {
+      var parts = imageUrl.split("base64,");
+      var mimeType = parts[0].split(":")[1].split(";")[0];
+      var decoded = Utilities.base64Decode(parts[1]);
+      blob = Utilities.newBlob(decoded, mimeType, "attachment." + mimeType.split("/")[1]);
     } else {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Error: " + (body.error || "Unknown")))
-        .build();
+      // Standard URL
+      blob = UrlFetchApp.fetch(imageUrl).getBlob();
     }
-  } catch(err) {
+
+    MailApp.sendEmail({
+      to: recipient,
+      subject: t.subject,
+      body: t.body,
+      attachments: [blob]
+    });
+
     return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Failed to reach server: " + err.message))
+      .setNotification(CardService.newNotification().setText(t.success))
+      .setNavigation(CardService.newNavigation().popToRoot())
       .build();
+
+  } catch (err) {
+    return createNotification(t.error + err.message);
   }
 }
 
-// ── Check Status & Save ────────────────────────────────────────────────────
-function onCheckStatus(e) {
-  var jobId = e.parameters.job_id;
-
-  try {
-    var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-    var job       = JSON.parse(statusRes.getContentText());
-
-    if (job.status === "error") {
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ " + job.message, null)))
-        .build();
-    }
-
-    if (job.status !== "done") {
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ Still working: " + job.message, jobId)))
-        .build();
-    }
-
-    // Fetch each part and save to Drive
-    var totalParts = job.parts || 1;
-    var folder     = DriveApp.getFolderById(DRIVE_FOLDER);
-    var savedMsg   = "✅ Saved to Drive!\n\n";
-
-    for (var i = 0; i < totalParts; i++) {
-      var partRes = UrlFetchApp.fetch(
-        RENDER_URL + "/part/" + jobId + "/" + i + "?secret=" + encodeURIComponent(API_SECRET),
-        { muteHttpExceptions: true }
-      );
-
-      if (partRes.getResponseCode() !== 200) {
-        savedMsg += "❌ Failed to fetch part " + (i+1) + "\n";
-        continue;
-      }
-
-      var blob     = partRes.getBlob();
-      var headers  = partRes.getHeaders();
-      var fname    = "video_part" + (i+1) + ".mp4";
-
-      // Extract filename from Content-Disposition header
-      var disposition = headers["Content-Disposition"] || headers["content-disposition"] || "";
-      var match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-      if (match) {
-        fname = match[1].replace(/['"]/g, "").trim();
-      }
-
-      blob.setName(fname);
-      blob.setContentType("video/mp4");
-      var saved = folder.createFile(blob);
-      savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
-    }
-
-    if (totalParts > 1) {
-      savedMsg += "📦 " + totalParts + " parts — play them in order.";
-    }
-
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(savedMsg, null)))
-      .build();
-
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
-      .build();
-  }
-}
-function checkLastJob() {
-  var jobId = "PASTE_YOUR_LAST_JOB_ID_HERE";
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
-  Logger.log(response.getContentText());
+function createNotification(msg) {
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText(msg))
+    .build();
 }
