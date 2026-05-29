@@ -11,18 +11,18 @@ function buildAddOn(e) {
 // ── Main card: URL input + Get Formats button ──────────────────────────────
 function buildMainCard(url, statusMsg) {
   var card    = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("🎬 Video Downloader");
+  var section = CardService.newCardSection().setHeader("🎬 YouTube Downloader");
 
   var urlInput = CardService.newTextInput()
     .setFieldName("video_url")
     .setTitle("Paste video link")
-    .setHint("YouTube, m3u8, Cisco NetAcad, etc.")
+    .setHint("YouTube.")
     .setValue(url || "");
 
   var cookiesInput = CardService.newTextInput()
     .setFieldName("cookies_file_id")
     .setTitle("Cookies file ID in Drive (optional)")
-    .setHint("For protected sites like YouTube or Cisco NetAcad");
+    .setHint("For protected sites like YouTube");
 
   var nameInput = CardService.newTextInput()
     .setFieldName("custom_name")
