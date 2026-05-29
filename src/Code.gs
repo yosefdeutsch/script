@@ -260,8 +260,8 @@ function onDownloadFormat(e) {
 
 // ── Check Status & Save ────────────────────────────────────────────────────
 function onCheckStatus(e) {
-  var jobId      = e.parameters.job_id;
-  var startFrom  = parseInt(e.parameters.start_from || "0");
+  var jobId     = e.parameters.job_id;
+  var partIndex = parseInt(e.parameters.part_index || "0");
 
   try {
     var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
@@ -280,54 +280,52 @@ function onCheckStatus(e) {
     }
 
     var totalParts = job.parts || 1;
-    var folder     = DriveApp.getFolderById(DRIVE_FOLDER);
-    var savedMsg   = startFrom === 0 ? "✅ Saving to Drive…\n\n" : "✅ Continuing from part " + (startFrom+1) + "…\n\n";
-    var savedCount = 0;
-    var MAX_PARTS_PER_RUN = 8; // stay under 6 min timeout
 
-    for (var i = startFrom; i < totalParts; i++) {
-      // Check if we're running out of time (max 8 parts per run)
-      if (savedCount >= MAX_PARTS_PER_RUN) {
-        // Show resume button for remaining parts
-        var resumeMsg = savedMsg + "⏳ " + (totalParts - i) + " more parts remaining.\nClick 'Continue Saving' to save the rest.";
-        return CardService.newActionResponseBuilder()
-          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(resumeMsg, null, jobId, i)))
-          .build();
-      }
+    // Fetch ONE part only
+    var partRes = UrlFetchApp.fetch(
+      RENDER_URL + "/part/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
+      { muteHttpExceptions: true }
+    );
 
-      var partRes = UrlFetchApp.fetch(
-        RENDER_URL + "/part/" + jobId + "/" + i + "?secret=" + encodeURIComponent(API_SECRET),
-        { muteHttpExceptions: true }
-      );
-
-      if (partRes.getResponseCode() !== 200) {
-        savedMsg += "❌ Failed to fetch part " + (i+1) + "\n";
-        continue;
-      }
-
-      var blob        = partRes.getBlob();
-      var headers     = partRes.getHeaders();
-      var fname       = "video_part" + String(i+1).padStart(3,"0") + ".mp4";
-      var disposition = headers["Content-Disposition"] || headers["content-disposition"] || "";
-      var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-      if (match) {
-        fname = match[1].replace(/['"]/g, "").trim();
-      }
-
-      blob.setName(fname);
-      blob.setContentType("video/mp4");
-      var saved = folder.createFile(blob);
-      savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
-      savedCount++;
+    if (partRes.getResponseCode() !== 200) {
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(
+          buildStatusCard("❌ Failed to fetch part " + (partIndex+1) + " of " + totalParts, null)
+        ))
+        .build();
     }
 
-    if (totalParts > 1) {
-      savedMsg += "📦 All " + totalParts + " parts saved — play them in order.";
+    // Save this one part to Drive
+    var blob        = partRes.getBlob();
+    var headers     = partRes.getHeaders();
+    var fname       = "video_part" + String(partIndex+1).padStart(3,"0") + ".mp4";
+    var disposition = headers["Content-Disposition"] || headers["content-disposition"] || "";
+    var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+    if (match) {
+      fname = match[1].replace(/['"]/g, "").trim();
     }
+    blob.setName(fname);
+    blob.setContentType("video/mp4");
 
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(savedMsg, null)))
-      .build();
+    var folder = DriveApp.getFolderById(DRIVE_FOLDER);
+    var saved  = folder.createFile(blob);
+
+    var nextIndex = partIndex + 1;
+    var msg = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
+
+    if (nextIndex < totalParts) {
+      // More parts remaining — show Next Part button
+      msg += "\n\n⏳ " + (totalParts - nextIndex) + " part(s) remaining.";
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null, jobId, nextIndex)))
+        .build();
+    } else {
+      // All done!
+      msg += "\n\n🎉 All " + totalParts + " parts saved! Play them in order.";
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null)))
+        .build();
+    }
 
   } catch(err) {
     return CardService.newActionResponseBuilder()
