@@ -1,26 +1,27 @@
 {
-  "timeZone": "Etc/GMT",
-  "dependencies": {
-  },
+  "timeZone": "America/New_York",
+  "dependencies": {},
   "exceptionLogging": "STACKDRIVER",
-  "oauthScopes": ["https://www.googleapis.com/auth/gmail.addons.execute", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/script.send_mail", "https://www.googleapis.com/auth/script.external_request", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/script.storage"],
   "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/gmail.addons.execute",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.locale",
+    "https://www.googleapis.com/auth/drive"
+  ],
   "addOns": {
     "common": {
-      "name": "Image Sender",
-      "logoUrl": "https://gross.free.nf/wp-content/uploads/2026/05/2659360-1.png",
+      "name": "Youtube Downloader Bot",
+      "logoUrl": "https://gross.free.nf/wp-content/uploads/2026/05/favicon_32x32.png",
+      "useLocaleFromApp": true,
       "layoutProperties": {
-        "primaryColor": "#009688",
-        "secondaryColor": "#00acc1"
-      },
-      "homepageTrigger": {
-        "runFunction": "buildHomepage",
-        "enabled": true
+        "primaryColor": "#FF0000"
       }
     },
     "gmail": {
       "homepageTrigger": {
-        "runFunction": "buildHomepage"
+        "runFunction": "buildAddOn"
       }
     }
   }
