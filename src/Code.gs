@@ -207,3 +207,11 @@ function checkJobNow() {
   var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
+function debugZip() {
+  var jobId = "7d7e9c25-79e2-42db-9eac-734462166f12";
+  var response = UrlFetchApp.fetch(
+    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
+    { muteHttpExceptions: true }
+  );
+  Logger.log(response.getContentText());
+}
