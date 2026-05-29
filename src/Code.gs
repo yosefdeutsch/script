@@ -235,3 +235,16 @@ function debugZip() {
   );
   Logger.log(response.getContentText());
 }
+function checkFileSize() {
+  var url = "https://www.youtube.com/watch?v=YxLx8T4_a_U";
+  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret: API_SECRET,
+      url: url,
+      cookies_content: ""
+    })
+  });
+  Logger.log(response.getContentText());
+}
