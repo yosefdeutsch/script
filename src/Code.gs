@@ -86,7 +86,7 @@ function buildFormatCard(url, cookiesFileId, customName, formats) {
 }
 
 // ── Status card ────────────────────────────────────────────────────────────
-function buildStatusCard(msg, jobId) {
+function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
   var card          = CardService.newCardBuilder();
   var statusSection = CardService.newCardSection().setHeader("📊 Status");
   var statusText    = CardService.newTextParagraph().setText(msg || "Working…");
@@ -98,9 +98,20 @@ function buildStatusCard(msg, jobId) {
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: jobId })
+          .setParameters({ job_id: jobId, start_from: "0" })
       );
     statusSection.addWidget(checkBtn);
+  }
+
+  if (resumeJobId) {
+    var resumeBtn = CardService.newTextButton()
+      .setText("▶️ Continue Saving Parts")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("onCheckStatus")
+          .setParameters({ job_id: resumeJobId, start_from: String(resumeFrom) })
+      );
+    statusSection.addWidget(resumeBtn);
   }
 
   var newBtn = CardService.newTextButton()
