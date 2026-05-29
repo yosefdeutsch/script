@@ -339,3 +339,8 @@ function checkLastJob() {
   var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
+function checkJobDebug() {
+  var jobId = "902c25ec-e32d-4394-8fae-28cffd3b6129";
+  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  Logger.log(response.getContentText());
+}
