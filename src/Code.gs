@@ -267,10 +267,35 @@ function onCheckStatus(e) {
         .build();
     }
 
-    // Show Drive links (uploaded directly by Render)
-    var msg = job.message;
+    // Fetch each part and save to Drive
+    var totalParts = job.parts || 1;
+    var folder     = DriveApp.getFolderById(DRIVE_FOLDER);
+    var savedMsg   = "✅ Saved to Drive!\n\n";
+
+    for (var i = 0; i < totalParts; i++) {
+      var partRes = UrlFetchApp.fetch(
+        RENDER_URL + "/part/" + jobId + "/" + i + "?secret=" + encodeURIComponent(API_SECRET),
+        { muteHttpExceptions: true }
+      );
+
+      if (partRes.getResponseCode() !== 200) {
+        savedMsg += "❌ Failed to fetch part " + (i+1) + "\n";
+        continue;
+      }
+
+      var blob  = partRes.getBlob();
+      var fname = blob.getName() || ("video_part" + (i+1) + ".mp4");
+      blob.setName(fname);
+      var saved = folder.createFile(blob);
+      savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
+    }
+
+    if (totalParts > 1) {
+      savedMsg += "📦 " + totalParts + " parts — play them in order.";
+    }
+
     return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null)))
+      .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(savedMsg, null)))
       .build();
 
   } catch(err) {
