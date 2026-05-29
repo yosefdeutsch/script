@@ -344,3 +344,10 @@ function checkJobDebug() {
   var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
+function debugJob() {
+  var jobId = "902c25ec-e32d-4394-8fae-28cffd3b6129";
+  var response = UrlFetchApp.fetch(
+    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET)
+  );
+  Logger.log(response.getContentText());
+}
