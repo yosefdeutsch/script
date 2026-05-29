@@ -5,10 +5,11 @@ const DRIVE_FOLDER = "1uyvFqXejRjamnKFGKMGT1lhYqvDO9Acb";
 // ──────────────────────────────────────────────────────────────────────────
 
 function buildAddOn(e) {
-  return buildCard("", "", null, "", "best", false);
+  return buildMainCard("", "");
 }
 
-function buildCard(url, statusMsg, jobId, customName, quality, splitVideo) {
+// ── Main card: URL input + Get Formats button ──────────────────────────────
+function buildMainCard(url, statusMsg) {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("🎬 Video Downloader");
 
@@ -18,47 +19,77 @@ function buildCard(url, statusMsg, jobId, customName, quality, splitVideo) {
     .setHint("YouTube, m3u8, Cisco NetAcad, etc.")
     .setValue(url || "");
 
-  // Cookies right below URL
   var cookiesInput = CardService.newTextInput()
     .setFieldName("cookies_file_id")
     .setTitle("Cookies file ID in Drive (optional)")
-    .setHint("For protected sites like Cisco NetAcad or YouTube");
+    .setHint("For protected sites like YouTube or Cisco NetAcad");
 
   var nameInput = CardService.newTextInput()
     .setFieldName("custom_name")
     .setTitle("File name (optional)")
-    .setHint("Leave empty to use original title")
-    .setValue(customName || "");
+    .setHint("Leave empty to use original title");
 
-  var qualitySelect = CardService.newSelectionInput()
-    .setType(CardService.SelectionInputType.DROPDOWN)
-    .setTitle("Quality")
-    .setFieldName("quality")
-    .addItem("🏆 Best available",  "best", (quality || "best") === "best")
-    .addItem("📺 1080p",           "1080", quality === "1080")
-    .addItem("📺 720p",            "720",  quality === "720")
-    .addItem("📺 480p",            "480",  quality === "480")
-    .addItem("📺 360p (smallest)", "360",  quality === "360");
-
-  var splitSwitch = CardService.newSelectionInput()
-    .setType(CardService.SelectionInputType.CHECK_BOX)
-    .setFieldName("split_video")
-    .addItem("✂️ Split into parts if file is large (every 45MB)", "yes", splitVideo === "yes");
-
-  var downloadBtn = CardService.newTextButton()
-    .setText("⬇️ Download Video")
-    .setOnClickAction(CardService.newAction().setFunctionName("onDownloadClick"));
+  var getFormatsBtn = CardService.newTextButton()
+    .setText("🔍 Get Available Formats")
+    .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
 
   var statusSection = CardService.newCardSection().setHeader("📊 Status");
-  var statusText    = CardService.newTextParagraph().setText(statusMsg || "No job running yet.");
+  var statusText    = CardService.newTextParagraph().setText(statusMsg || "Paste a link and click Get Formats.");
 
-  // Order: URL → Cookies → File name → Quality → Split → Button
   section.addWidget(urlInput);
   section.addWidget(cookiesInput);
   section.addWidget(nameInput);
-  section.addWidget(qualitySelect);
-  section.addWidget(splitSwitch);
+  section.addWidget(getFormatsBtn);
+  statusSection.addWidget(statusText);
+
+  card.addSection(section);
+  card.addSection(statusSection);
+  return card.build();
+}
+
+// ── Format picker card ─────────────────────────────────────────────────────
+function buildFormatCard(url, cookiesFileId, customName, formats) {
+  var card    = CardService.newCardBuilder();
+  var section = CardService.newCardSection().setHeader("📋 Choose Format");
+
+  var formatSelect = CardService.newSelectionInput()
+    .setType(CardService.SelectionInputType.RADIO_BUTTON)
+    .setTitle("Available formats")
+    .setFieldName("format_id");
+
+  for (var i = 0; i < formats.length; i++) {
+    var f = formats[i];
+    formatSelect.addItem(f.label, f.id, i === 0);
+  }
+
+  var downloadBtn = CardService.newTextButton()
+    .setText("⬇️ Download Selected Format")
+    .setOnClickAction(
+      CardService.newAction()
+        .setFunctionName("onDownloadFormat")
+        .setParameters({
+          url:            url,
+          cookies_file_id: cookiesFileId,
+          custom_name:    customName
+        })
+    );
+
+  var backBtn = CardService.newTextButton()
+    .setText("← Back")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+
+  section.addWidget(formatSelect);
   section.addWidget(downloadBtn);
+  section.addWidget(backBtn);
+  card.addSection(section);
+  return card.build();
+}
+
+// ── Status card ────────────────────────────────────────────────────────────
+function buildStatusCard(msg, jobId) {
+  var card          = CardService.newCardBuilder();
+  var statusSection = CardService.newCardSection().setHeader("📊 Status");
+  var statusText    = CardService.newTextParagraph().setText(msg || "Working…");
   statusSection.addWidget(statusText);
 
   if (jobId) {
@@ -67,23 +98,25 @@ function buildCard(url, statusMsg, jobId, customName, quality, splitVideo) {
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: jobId, custom_name: customName || "", split_video: splitVideo || "no" })
+          .setParameters({ job_id: jobId })
       );
     statusSection.addWidget(checkBtn);
   }
 
-  card.addSection(section);
+  var newBtn = CardService.newTextButton()
+    .setText("⬇️ Download Another Video")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+  statusSection.addWidget(newBtn);
+
   card.addSection(statusSection);
   return card.build();
 }
 
-// ── Download button ────────────────────────────────────────────────────────
-function onDownloadClick(e) {
+// ── Get Formats button clicked ─────────────────────────────────────────────
+function onGetFormats(e) {
   var url           = e.formInput.video_url.trim();
-  var customName    = e.formInput.custom_name ? e.formInput.custom_name.trim() : "";
-  var quality       = e.formInput.quality || "best";
-  var splitVideo    = (e.formInput.split_video && e.formInput.split_video.indexOf("yes") !== -1) ? "yes" : "no";
   var cookiesFileId = e.formInput.cookies_file_id ? e.formInput.cookies_file_id.trim() : "";
+  var customName    = e.formInput.custom_name ? e.formInput.custom_name.trim() : "";
 
   if (!url) {
     return CardService.newActionResponseBuilder()
@@ -103,12 +136,87 @@ function onDownloadClick(e) {
   }
 
   try {
+    var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
+      muteHttpExceptions: true
+    });
+
+    var body = JSON.parse(response.getContentText());
+    var stdout = body.stdout || "";
+
+    if (!stdout || body.stderr) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ Could not get formats: " + (body.stderr || "Unknown error").substring(0, 200)))
+        .build();
+    }
+
+    // Parse format lines
+    var formats = [];
+    var lines   = stdout.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      // Match lines starting with a format ID number
+      var match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+.*\|\s*([\d.]+\S+)\s+\S+\s+(\S+)/);
+      if (match) {
+        var id         = match[1];
+        var ext        = match[2];
+        var resolution = match[3];
+        var fps        = match[4];
+        var size       = match[5];
+        var proto      = match[6];
+        var label      = id + " | " + ext + " | " + resolution + " | " + size;
+        formats.push({ id: id, label: label });
+      }
+    }
+
+    // Also add "best" option at top
+    formats.unshift({ id: "best", label: "🏆 Best available (auto)" });
+
+    if (formats.length <= 1) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ No formats found. Try adding cookies."))
+        .build();
+    }
+
+    var newCard = buildFormatCard(url, cookiesFileId, customName, formats);
+    return CardService.newActionResponseBuilder()
+      .setNavigation(CardService.newNavigation().updateCard(newCard))
+      .build();
+
+  } catch(err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
+      .build();
+  }
+}
+
+// ── Download Selected Format ───────────────────────────────────────────────
+function onDownloadFormat(e) {
+  var formatId      = e.formInput.format_id;
+  var url           = e.parameters.url;
+  var cookiesFileId = e.parameters.cookies_file_id || "";
+  var customName    = e.parameters.custom_name || "";
+
+  var cookiesContent = "";
+  if (cookiesFileId) {
+    try {
+      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+    } catch(err) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ Could not read cookies file: " + err.message))
+        .build();
+    }
+  }
+
+  try {
     var payload = {
       url:             url,
       secret:          API_SECRET,
       cookies_content: cookiesContent,
-      quality:         quality,
-      split_video:     splitVideo,
+      format_id:       formatId,
+      custom_name:     customName,
       folder_id:       DRIVE_FOLDER
     };
 
@@ -123,7 +231,7 @@ function onDownloadClick(e) {
     var body = JSON.parse(response.getContentText());
 
     if (code === 202) {
-      var newCard = buildCard(url, "⏳ Download started! Wait then click 'Check Status & Save to Drive'.", body.job_id, customName, quality, splitVideo);
+      var newCard = buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", body.job_id);
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(newCard))
         .build();
@@ -141,9 +249,7 @@ function onDownloadClick(e) {
 
 // ── Check Status & Save ────────────────────────────────────────────────────
 function onCheckStatus(e) {
-  var jobId      = e.parameters.job_id;
-  var customName = e.parameters.custom_name || "";
-  var splitVideo = e.parameters.split_video || "no";
+  var jobId = e.parameters.job_id;
 
   try {
     var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
@@ -151,102 +257,25 @@ function onCheckStatus(e) {
 
     if (job.status === "error") {
       return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildCard("", "❌ " + job.message, null, "", "best", "no")))
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ " + job.message, null)))
         .build();
     }
 
     if (job.status !== "done") {
       return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildCard("", "⏳ Still working: " + job.message, jobId, customName, "best", splitVideo)))
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ Still working: " + job.message, jobId)))
         .build();
     }
 
-    // If Render uploaded directly to Drive, show links immediately
-    if (job.drive_links && job.drive_links.length > 0 && job.message !== "fallback") {
-      var savedMsg = job.message;
-      // Apply custom name if provided (rename in Drive)
-      if (customName && job.drive_links.length === 1) {
-        try {
-          var fileId  = job.drive_links[0].link.match(/[-\w]{25,}/)[0];
-          var folder  = DriveApp.getFolderById(DRIVE_FOLDER);
-          var file    = DriveApp.getFileById(fileId);
-          file.setName(customName.replace(/\.mp4$/i, "") + ".mp4");
-          savedMsg = "✅ Saved to Drive!\n\n📁 " + file.getName() + "\n🔗 " + file.getUrl();
-        } catch(e) {}
-      }
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildCard("", savedMsg, null, "", "best", "no")))
-        .build();
-    }
-
-    // Fallback: fetch from Render and save via Apps Script
-    var fileRes = UrlFetchApp.fetch(
-      RENDER_URL + "/result_zip/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
-      { muteHttpExceptions: true }
-    );
-
-    if (fileRes.getResponseCode() !== 200) {
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildCard("", "❌ Could not fetch file from server.", null, "", "best", "no")))
-        .build();
-    }
-
-    var folder      = DriveApp.getFolderById(DRIVE_FOLDER);
-    var blob        = fileRes.getBlob();
-    var contentType = fileRes.getHeaders()["Content-Type"] || "";
-    var isZip       = contentType.indexOf("zip") !== -1 || blob.getName().indexOf(".zip") !== -1;
-
-    var finalName;
-    if (isZip) {
-      finalName = (customName || "video_parts") + ".zip";
-    } else {
-      finalName = customName
-        ? customName.replace(/\.mp4$/i, "") + ".mp4"
-        : (blob.getName() || "video.mp4");
-    }
-
-    blob.setName(finalName);
-    var saved    = folder.createFile(blob);
-    var savedMsg = "✅ Saved to Drive!\n\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
-
-    if (isZip) {
-      savedMsg += "\n\n📦 Zip file with all video parts.\nExtract it to get the mp4 files.";
-    }
-
+    // Show Drive links (uploaded directly by Render)
+    var msg = job.message;
     return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(buildCard("", savedMsg, null, "", "best", "no")))
+      .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null)))
       .build();
+
   } catch(err) {
     return CardService.newActionResponseBuilder()
       .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
       .build();
   }
-}
-function checkJobNow() {
-  var jobId = "7d7e9c25-79e2-42db-9eac-734462166f12";
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
-  Logger.log(response.getContentText());
-}
-function debugZip() {
-  var jobId = "7d7e9c25-79e2-42db-9eac-734462166f12";
-  var response = UrlFetchApp.fetch(
-    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
-    { muteHttpExceptions: true }
-  );
-  Logger.log(response.getContentText());
-}
-function checkFileSize() {
-  var cookiesFileId  = "1hFqySYmoNladvzVeMqB7EbMjiHWHWG1f";
-  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret:          API_SECRET,
-      url:             "https://www.youtube.com/watch?v=KdN5Qu7ceqs",
-      cookies_content: cookiesContent
-    })
-  });
-  Logger.log(response.getContentText());
 }
