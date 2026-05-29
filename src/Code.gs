@@ -249,7 +249,8 @@ function onDownloadFormat(e) {
 
 // ── Check Status & Save ────────────────────────────────────────────────────
 function onCheckStatus(e) {
-  var jobId = e.parameters.job_id;
+  var jobId      = e.parameters.job_id;
+  var startFrom  = parseInt(e.parameters.start_from || "0");
 
   try {
     var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
@@ -267,12 +268,22 @@ function onCheckStatus(e) {
         .build();
     }
 
-    // Fetch each part and save to Drive
     var totalParts = job.parts || 1;
     var folder     = DriveApp.getFolderById(DRIVE_FOLDER);
-    var savedMsg   = "✅ Saved to Drive!\n\n";
+    var savedMsg   = startFrom === 0 ? "✅ Saving to Drive…\n\n" : "✅ Continuing from part " + (startFrom+1) + "…\n\n";
+    var savedCount = 0;
+    var MAX_PARTS_PER_RUN = 8; // stay under 6 min timeout
 
-    for (var i = 0; i < totalParts; i++) {
+    for (var i = startFrom; i < totalParts; i++) {
+      // Check if we're running out of time (max 8 parts per run)
+      if (savedCount >= MAX_PARTS_PER_RUN) {
+        // Show resume button for remaining parts
+        var resumeMsg = savedMsg + "⏳ " + (totalParts - i) + " more parts remaining.\nClick 'Continue Saving' to save the rest.";
+        return CardService.newActionResponseBuilder()
+          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(resumeMsg, null, jobId, i)))
+          .build();
+      }
+
       var partRes = UrlFetchApp.fetch(
         RENDER_URL + "/part/" + jobId + "/" + i + "?secret=" + encodeURIComponent(API_SECRET),
         { muteHttpExceptions: true }
@@ -283,13 +294,11 @@ function onCheckStatus(e) {
         continue;
       }
 
-      var blob     = partRes.getBlob();
-      var headers  = partRes.getHeaders();
-      var fname    = "video_part" + (i+1) + ".mp4";
-
-      // Extract filename from Content-Disposition header
+      var blob        = partRes.getBlob();
+      var headers     = partRes.getHeaders();
+      var fname       = "video_part" + String(i+1).padStart(3,"0") + ".mp4";
       var disposition = headers["Content-Disposition"] || headers["content-disposition"] || "";
-      var match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+      var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
       if (match) {
         fname = match[1].replace(/['"]/g, "").trim();
       }
@@ -298,10 +307,11 @@ function onCheckStatus(e) {
       blob.setContentType("video/mp4");
       var saved = folder.createFile(blob);
       savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
+      savedCount++;
     }
 
     if (totalParts > 1) {
-      savedMsg += "📦 " + totalParts + " parts — play them in order.";
+      savedMsg += "📦 All " + totalParts + " parts saved — play them in order.";
     }
 
     return CardService.newActionResponseBuilder()
