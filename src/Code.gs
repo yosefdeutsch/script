@@ -283,9 +283,19 @@ function onCheckStatus(e) {
         continue;
       }
 
-      var blob  = partRes.getBlob();
-      var fname = blob.getName() || ("video_part" + (i+1) + ".mp4");
+      var blob     = partRes.getBlob();
+      var headers  = partRes.getHeaders();
+      var fname    = "video_part" + (i+1) + ".mp4";
+
+      // Extract filename from Content-Disposition header
+      var disposition = headers["Content-Disposition"] || headers["content-disposition"] || "";
+      var match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+      if (match) {
+        fname = match[1].replace(/['"]/g, "").trim();
+      }
+
       blob.setName(fname);
+      blob.setContentType("video/mp4");
       var saved = folder.createFile(blob);
       savedMsg += "📁 " + saved.getName() + "\n🔗 " + saved.getUrl() + "\n\n";
     }
