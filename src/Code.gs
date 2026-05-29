@@ -3,7 +3,7 @@
  */
 const THEME = {
   color: "#009688", // Greenish-Bluish Teal
-  icon: "https://cdn-icons-png.flaticon.com/512/3342/3342137.png"
+  icon: "https://gross.free.nf/wp-content/uploads/2026/05/2659360-1.png"
 };
 
 // Using Unicode formatting characters to strongly suggest RTL rendering for the text itself
