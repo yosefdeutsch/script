@@ -15,7 +15,7 @@
       "name": "Youtube Downloader Bot",
       "logoUrl": "https://www.youtube.com/s/desktop/2e64e932/img/favicon_32x32.png",
       "useLocaleFromApp": true,
-      "themeColors": {
+      "layoutProperties": {
         "primaryColor": "#FF0000"
       }
     },
