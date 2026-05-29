@@ -108,7 +108,8 @@ function onDownloadClick(e) {
       secret:          API_SECRET,
       cookies_content: cookiesContent,
       quality:         quality,
-      split_video:     splitVideo
+      split_video:     splitVideo,
+      folder_id:       DRIVE_FOLDER
     };
 
     var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
@@ -160,6 +161,25 @@ function onCheckStatus(e) {
         .build();
     }
 
+    // If Render uploaded directly to Drive, show links immediately
+    if (job.drive_links && job.drive_links.length > 0 && job.message !== "fallback") {
+      var savedMsg = job.message;
+      // Apply custom name if provided (rename in Drive)
+      if (customName && job.drive_links.length === 1) {
+        try {
+          var fileId  = job.drive_links[0].link.match(/[-\w]{25,}/)[0];
+          var folder  = DriveApp.getFolderById(DRIVE_FOLDER);
+          var file    = DriveApp.getFileById(fileId);
+          file.setName(customName.replace(/\.mp4$/i, "") + ".mp4");
+          savedMsg = "✅ Saved to Drive!\n\n📁 " + file.getName() + "\n🔗 " + file.getUrl();
+        } catch(e) {}
+      }
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(buildCard("", savedMsg, null, "", "best", "no")))
+        .build();
+    }
+
+    // Fallback: fetch from Render and save via Apps Script
     var fileRes = UrlFetchApp.fetch(
       RENDER_URL + "/result_zip/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
       { muteHttpExceptions: true }
@@ -190,7 +210,7 @@ function onCheckStatus(e) {
     var savedMsg = "✅ Saved to Drive!\n\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
 
     if (isZip) {
-      savedMsg += "\n\n📦 Zip file with all video parts inside.\nExtract it to get the mp4 files.";
+      savedMsg += "\n\n📦 Zip file with all video parts.\nExtract it to get the mp4 files.";
     }
 
     return CardService.newActionResponseBuilder()
