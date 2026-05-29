@@ -98,18 +98,19 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: jobId, start_from: "0" })
+          .setParameters({ job_id: jobId, part_index: "0" })
       );
     statusSection.addWidget(checkBtn);
   }
 
-  if (resumeJobId) {
+  if (resumeJobId !== undefined && resumeJobId !== null) {
+    var nextLabel = "▶️ Save Part " + (resumeFrom + 1);
     var resumeBtn = CardService.newTextButton()
-      .setText("▶️ Continue Saving Parts")
+      .setText(nextLabel)
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: resumeJobId, start_from: String(resumeFrom) })
+          .setParameters({ job_id: resumeJobId, part_index: String(resumeFrom) })
       );
     statusSection.addWidget(resumeBtn);
   }
