@@ -270,7 +270,8 @@ function onDownloadFormat(e) {
 // ── Check Status & Save ────────────────────────────────────────────────────
 function onCheckStatus(e) {
   var jobId     = e.parameters.job_id;
-  var partIndex = parseInt(e.parameters.part_index || "0");
+  var partIndex = parseInt(e.parameters.part_index !== undefined ? e.parameters.part_index : "0");
+  if (isNaN(partIndex)) partIndex = 0;
 
   try {
     // Check if this specific part is ready
