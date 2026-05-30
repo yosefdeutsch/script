@@ -359,7 +359,7 @@ function debugJob() {
 }
 function debugLatest() {
   // Get the latest job ID from your last download
-  var jobId = "PASTE_LATEST_JOB_ID_FROM_RENDER_LOGS";
+  var jobId = "POST /download HTTP/1.1" 202";
   var response = UrlFetchApp.fetch(
     RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
     { muteHttpExceptions: true }
