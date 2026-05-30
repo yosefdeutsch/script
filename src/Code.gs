@@ -166,11 +166,30 @@ function onGetFormats(e) {
           var driveFile = DriveApp.getFileById(fileIdMatch[0]);
           var fileSizeMB = driveFile.getSize() / (1024 * 1024);
           if (fileSizeMB > 400) {
-            return CardService.newActionResponseBuilder()
-              .setNotification(CardService.newNotification().setText(
-                "⚠️ File is " + Math.round(fileSizeMB) + "MB — too large for the server (max 400MB). Try a smaller file."
-              ))
-              .build();
+            // Allow but flag for compression
+            var compressPayload = {
+              url:             url,
+              secret:          API_SECRET,
+              cookies_content: cookiesContent,
+              format_id:       "best",
+              custom_name:     customName,
+              folder_id:       DRIVE_FOLDER,
+              compress:        true
+            };
+            var compressRes = UrlFetchApp.fetch(RENDER_URL + "/download", {
+              method:             "post",
+              contentType:        "application/json",
+              payload:            JSON.stringify(compressPayload),
+              muteHttpExceptions: true
+            });
+            var compressBody = JSON.parse(compressRes.getContentText());
+            if (compressRes.getResponseCode() === 202) {
+              return CardService.newActionResponseBuilder()
+                .setNavigation(CardService.newNavigation().updateCard(
+                  buildStatusCard("⏳ File is " + Math.round(fileSizeMB) + "MB — downloading and compressing to fit.\n\nClick 'Check Status' in a few minutes.", compressBody.job_id)
+                ))
+                .build();
+            }
           }
         } catch(err) {
           // Can't check size — warn user but allow download
