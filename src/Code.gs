@@ -155,8 +155,34 @@ function onGetFormats(e) {
     }
   }
 
-  // m3u8 and direct video files — skip format picker, download directly
-  if (url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1) {
+  // m3u8, direct video files, and Google Drive — skip format picker, download directly
+  if (url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1 || url.indexOf("drive.google.com") !== -1) {
+
+    // For Google Drive links, check file size first
+    if (url.indexOf("drive.google.com") !== -1) {
+      var fileIdMatch = url.match(/[-\w]{25,}/);
+      if (fileIdMatch) {
+        try {
+          var driveFile = DriveApp.getFileById(fileIdMatch[0]);
+          var fileSizeMB = driveFile.getSize() / (1024 * 1024);
+          if (fileSizeMB > 400) {
+            return CardService.newActionResponseBuilder()
+              .setNotification(CardService.newNotification().setText(
+                "⚠️ File is " + Math.round(fileSizeMB) + "MB — too large for the server (max 400MB). Try a smaller file."
+              ))
+              .build();
+          }
+        } catch(err) {
+          // Can't check size — warn user but allow download
+          return CardService.newActionResponseBuilder()
+            .setNotification(CardService.newNotification().setText(
+              "⚠️ Could not check file size. Only download if the file is under 400MB or the server may crash."
+            ))
+            .build();
+        }
+      }
+    }
+
     var directPayload = {
       url:             url,
       secret:          API_SECRET,
