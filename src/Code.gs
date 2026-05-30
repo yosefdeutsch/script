@@ -104,7 +104,7 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
   }
 
   if (resumeJobId !== undefined && resumeJobId !== null) {
-    var nextLabel = resumeFrom === partIndex ? "🔄 Check Again" : "▶️ Save Part " + (resumeFrom + 1);
+    var nextLabel = "▶️ Save Part " + (resumeFrom + 1);
     var resumeBtn = CardService.newTextButton()
       .setText(nextLabel)
       .setOnClickAction(
