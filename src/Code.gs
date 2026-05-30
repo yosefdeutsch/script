@@ -33,6 +33,10 @@ function buildMainCard(url, statusMsg) {
     .setText("🔍 Get Available Formats")
     .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
 
+  var historyBtn = CardService.newTextButton()
+    .setText("🕐 Download History")
+    .setOnClickAction(CardService.newAction().setFunctionName("onViewHistory"));
+
   var statusSection = CardService.newCardSection().setHeader("📊 Status");
   var statusText    = CardService.newTextParagraph().setText(statusMsg || "Paste a link and click Get Formats.");
 
@@ -40,6 +44,7 @@ function buildMainCard(url, statusMsg) {
   section.addWidget(cookiesInput);
   section.addWidget(nameInput);
   section.addWidget(getFormatsBtn);
+  section.addWidget(historyBtn);
   statusSection.addWidget(statusText);
 
   card.addSection(section);
@@ -341,9 +346,31 @@ function onCheckStatus(e) {
         .build();
     }
 
-    // Save to Drive
+    // Get job info for custom name and total parts
+    var statusRes2  = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+    var jobInfo     = JSON.parse(statusRes2.getContentText());
+    var totalParts  = info.total || 1;
+    var customName  = jobInfo.custom_name || "";
+
+    // Determine target folder
+    // Create subfolder only if multiple parts and has custom name
+    var targetFolder;
+    if (totalParts > 1 && customName) {
+      // Check if subfolder already exists
+      var subFolderName = customName.replace(/\.mp4$/i, "");
+      var rootFolder    = DriveApp.getFolderById(DRIVE_FOLDER);
+      var existing      = rootFolder.getFoldersByName(subFolderName);
+      if (existing.hasNext()) {
+        targetFolder = existing.next();
+      } else {
+        targetFolder = rootFolder.createFolder(subFolderName);
+      }
+    } else {
+      targetFolder = DriveApp.getFolderById(DRIVE_FOLDER);
+    }
+
+    // Save this part
     var blob        = fileRes.getBlob();
-    var headers     = partRes.getHeaders ? partRes.getHeaders() : {};
     var fname       = "video_part" + String(partIndex+1).padStart(3,"0") + ".mp4";
     var disposition = (fileRes.getHeaders()["Content-Disposition"] || fileRes.getHeaders()["content-disposition"] || "");
     var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
@@ -353,12 +380,13 @@ function onCheckStatus(e) {
     blob.setName(fname);
     blob.setContentType("video/mp4");
 
-    var folder = DriveApp.getFolderById(DRIVE_FOLDER);
-    var saved  = folder.createFile(blob);
+    var saved   = targetFolder.createFile(blob);
+    var nextIndex = partIndex + 1;
+    var msg     = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
 
-    var totalParts = info.total || 1;
-    var nextIndex  = partIndex + 1;
-    var msg        = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
+    if (totalParts > 1 && customName) {
+      msg += "\n📂 Saved in folder: " + customName.replace(/\.mp4$/i, "");
+    }
 
     if (nextIndex < totalParts || info.job_status !== "done") {
       msg += "\n\n⏳ More parts remaining.";
@@ -366,6 +394,19 @@ function onCheckStatus(e) {
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null, jobId, nextIndex)))
         .build();
     } else {
+      // All done — add to history
+      var historyLinks = [];
+      if (totalParts === 1) {
+        historyLinks.push(saved.getUrl());
+      } else {
+        historyLinks.push(targetFolder.getUrl());
+      }
+      addToHistory(
+        customName || fname,
+        totalParts,
+        historyLinks
+      );
+
       msg += "\n\n🎉 All " + totalParts + " parts saved! Play them in order.";
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null)))
@@ -402,4 +443,72 @@ function debugLatest() {
     { muteHttpExceptions: true }
   );
   Logger.log(response.getContentText());
+}
+// ── Download History ───────────────────────────────────────────────────────
+function getHistory() {
+  var props = PropertiesService.getUserProperties();
+  var raw   = props.getProperty("download_history");
+  return raw ? JSON.parse(raw) : [];
+}
+
+function addToHistory(name, parts, links) {
+  var props   = PropertiesService.getUserProperties();
+  var history = getHistory();
+  history.unshift({
+    name:  name,
+    parts: parts,
+    links: links,
+    date:  new Date().toLocaleString()
+  });
+  // Keep only last 20 entries
+  if (history.length > 20) history = history.slice(0, 20);
+  props.setProperty("download_history", JSON.stringify(history));
+}
+
+function buildHistoryCard() {
+  var card    = CardService.newCardBuilder();
+  var section = CardService.newCardSection().setHeader("🕐 Download History");
+  var history = getHistory();
+
+  if (history.length === 0) {
+    section.addWidget(CardService.newTextParagraph().setText("No downloads yet."));
+  } else {
+    for (var i = 0; i < history.length; i++) {
+      var h   = history[i];
+      var txt = "📁 " + h.name + "\n🗓 " + h.date + "\n📦 " + h.parts + " part(s)";
+      for (var j = 0; j < h.links.length; j++) {
+        txt += "\n🔗 " + h.links[j];
+      }
+      section.addWidget(CardService.newTextParagraph().setText(txt));
+      if (i < history.length - 1) {
+        section.addWidget(CardService.newDivider());
+      }
+    }
+  }
+
+  var backBtn = CardService.newTextButton()
+    .setText("← Back")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+  section.addWidget(backBtn);
+
+  var clearBtn = CardService.newTextButton()
+    .setText("🗑 Clear History")
+    .setOnClickAction(CardService.newAction().setFunctionName("clearHistory"));
+  section.addWidget(clearBtn);
+
+  card.addSection(section);
+  return card.build();
+}
+
+function clearHistory() {
+  PropertiesService.getUserProperties().deleteProperty("download_history");
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().updateCard(buildHistoryCard()))
+    .build();
+}
+
+function onViewHistory(e) {
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().pushCard(buildHistoryCard()))
+    .build();
 }
