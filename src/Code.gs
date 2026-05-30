@@ -265,42 +265,49 @@ function onCheckStatus(e) {
   var partIndex = parseInt(e.parameters.part_index || "0");
 
   try {
-    var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-    var job       = JSON.parse(statusRes.getContentText());
+    // Check if this specific part is ready
+    var partRes = UrlFetchApp.fetch(
+      RENDER_URL + "/part_ready/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
+      { muteHttpExceptions: true }
+    );
+    var info = JSON.parse(partRes.getContentText());
 
-    if (job.status === "error") {
+    // Job failed
+    if (info.job_status === "error") {
+      var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+      var job       = JSON.parse(statusRes.getContentText());
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ " + job.message, null)))
         .build();
     }
 
-    if (job.status !== "done") {
+    // Part not ready yet
+    if (!info.ready) {
+      var stillMsg = "⏳ Downloading… part " + (partIndex+1) + " not ready yet.\nKeep clicking to check.";
       return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ Still working: " + job.message, jobId)))
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(stillMsg, null, jobId, partIndex)))
         .build();
     }
 
-    var totalParts = job.parts || 1;
-
-    // Fetch ONE part only
-    var partRes = UrlFetchApp.fetch(
+    // Part is ready — fetch and save it NOW
+    var fileRes = UrlFetchApp.fetch(
       RENDER_URL + "/part/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
       { muteHttpExceptions: true }
     );
 
-    if (partRes.getResponseCode() !== 200) {
+    if (fileRes.getResponseCode() !== 200) {
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(
-          buildStatusCard("❌ Failed to fetch part " + (partIndex+1) + " of " + totalParts, null)
+          buildStatusCard("❌ Failed to fetch part " + (partIndex+1), null, jobId, partIndex)
         ))
         .build();
     }
 
-    // Save this one part to Drive
-    var blob        = partRes.getBlob();
-    var headers     = partRes.getHeaders();
+    // Save to Drive
+    var blob        = fileRes.getBlob();
+    var headers     = partRes.getHeaders ? partRes.getHeaders() : {};
     var fname       = "video_part" + String(partIndex+1).padStart(3,"0") + ".mp4";
-    var disposition = headers["Content-Disposition"] || headers["content-disposition"] || "";
+    var disposition = (fileRes.getHeaders()["Content-Disposition"] || fileRes.getHeaders()["content-disposition"] || "");
     var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
     if (match) {
       fname = match[1].replace(/['"]/g, "").trim();
@@ -311,17 +318,16 @@ function onCheckStatus(e) {
     var folder = DriveApp.getFolderById(DRIVE_FOLDER);
     var saved  = folder.createFile(blob);
 
-    var nextIndex = partIndex + 1;
-    var msg = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
+    var totalParts = info.total || 1;
+    var nextIndex  = partIndex + 1;
+    var msg        = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
 
-    if (nextIndex < totalParts) {
-      // More parts remaining — show Next Part button
-      msg += "\n\n⏳ " + (totalParts - nextIndex) + " part(s) remaining.";
+    if (nextIndex < totalParts || info.job_status !== "done") {
+      msg += "\n\n⏳ More parts remaining.";
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null, jobId, nextIndex)))
         .build();
     } else {
-      // All done!
       msg += "\n\n🎉 All " + totalParts + " parts saved! Play them in order.";
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null)))
