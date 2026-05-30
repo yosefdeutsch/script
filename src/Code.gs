@@ -147,6 +147,32 @@ function onGetFormats(e) {
     }
   }
 
+  // m3u8 and direct video files — skip format picker, download directly
+  if (url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1) {
+    var directPayload = {
+      url:             url,
+      secret:          API_SECRET,
+      cookies_content: cookiesContent,
+      format_id:       "best",
+      custom_name:     customName,
+      folder_id:       DRIVE_FOLDER
+    };
+    var directRes = UrlFetchApp.fetch(RENDER_URL + "/download", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify(directPayload),
+      muteHttpExceptions: true
+    });
+    var directBody = JSON.parse(directRes.getContentText());
+    if (directRes.getResponseCode() === 202) {
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(
+          buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", directBody.job_id)
+        ))
+        .build();
+    }
+  }
+
   try {
     var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
       method:             "post",
