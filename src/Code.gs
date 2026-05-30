@@ -357,3 +357,12 @@ function debugJob() {
   );
   Logger.log(response.getContentText());
 }
+function debugLatest() {
+  // Get the latest job ID from your last download
+  var jobId = "PASTE_LATEST_JOB_ID_FROM_RENDER_LOGS";
+  var response = UrlFetchApp.fetch(
+    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
+    { muteHttpExceptions: true }
+  );
+  Logger.log(response.getContentText());
+}
