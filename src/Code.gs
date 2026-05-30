@@ -104,7 +104,7 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
   }
 
   if (resumeJobId !== undefined && resumeJobId !== null) {
-    var nextLabel = "▶️ Save Part " + (resumeFrom + 1);
+    var nextLabel = resumeFrom === partIndex ? "🔄 Check Again" : "▶️ Save Part " + (resumeFrom + 1);
     var resumeBtn = CardService.newTextButton()
       .setText(nextLabel)
       .setOnClickAction(
@@ -164,27 +164,35 @@ function onGetFormats(e) {
         .build();
     }
 
-    // Parse format lines
+    // Parse format lines — skip anything over 400MB
     var formats = [];
     var lines   = stdout.split("\n");
     for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim();
-      // Match lines starting with a format ID number
-      var match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+.*\|\s*([\d.]+\S+)\s+\S+\s+(\S+)/);
-      if (match) {
-        var id         = match[1];
-        var ext        = match[2];
-        var resolution = match[3];
-        var fps        = match[4];
-        var size       = match[5];
-        var proto      = match[6];
-        var label      = id + " | " + ext + " | " + resolution + " | " + size;
-        formats.push({ id: id, label: label });
-      }
+      var line  = lines[i].trim();
+      var match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+/);
+      if (!match) continue;
+
+      var id         = match[1];
+      var ext        = match[2];
+      var resolution = match[3];
+
+      // Extract file size
+      var sizeMatch = line.match(/\|\s*~?([\d.]+)(MiB|GiB)\s/);
+      if (!sizeMatch) continue;
+
+      var sizeNum  = parseFloat(sizeMatch[1]);
+      var sizeUnit = sizeMatch[2];
+      var sizeMB   = sizeUnit === "GiB" ? sizeNum * 1024 : sizeNum;
+
+      // Skip formats over 400MB
+      if (sizeMB > 400) continue;
+
+      var label = id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2];
+      formats.push({ id: id, label: label });
     }
 
-    // Also add "best" option at top
-    formats.unshift({ id: "best", label: "🏆 Best available (auto)" });
+    // Add "best" option at top
+    formats.unshift({ id: "best", label: "🏆 Best available — auto (≤400MB only)" });
 
     if (formats.length <= 1) {
       return CardService.newActionResponseBuilder()
@@ -283,7 +291,7 @@ function onCheckStatus(e) {
 
     // Part not ready yet
     if (!info.ready) {
-      var stillMsg = "⏳ Downloading… part " + (partIndex+1) + " not ready yet.\nKeep clicking to check.";
+      var stillMsg = "⏳ Still downloading… part " + (partIndex+1) + " not ready yet.\n\nClick 'Check Again' in ~30 seconds.";
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(stillMsg, null, jobId, partIndex)))
         .build();
