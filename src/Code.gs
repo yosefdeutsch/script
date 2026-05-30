@@ -115,10 +115,13 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
     statusSection.addWidget(resumeBtn);
   }
 
-  var newBtn = CardService.newTextButton()
-    .setText("⬇️ Download Another Video")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  statusSection.addWidget(newBtn);
+  // Only show "Download Another Video" when fully done (no pending job or resume)
+  if (!jobId && !resumeJobId) {
+    var newBtn = CardService.newTextButton()
+      .setText("⬇️ Download Another Video")
+      .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    statusSection.addWidget(newBtn);
+  }
 
   card.addSection(statusSection);
   return card.build();
