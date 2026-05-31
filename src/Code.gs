@@ -166,29 +166,11 @@ function onGetFormats(e) {
           var driveFile = DriveApp.getFileById(fileIdMatch[0]);
           var fileSizeMB = driveFile.getSize() / (1024 * 1024);
           if (fileSizeMB > 400) {
-            var largePayload = {
-              url:             url,
-              secret:          API_SECRET,
-              cookies_content: cookiesContent,
-              format_id:       "best",
-              custom_name:     customName,
-              folder_id:       DRIVE_FOLDER,
-              compress:        false
-            };
-            var largeRes  = UrlFetchApp.fetch(RENDER_URL + "/download", {
-              method:             "post",
-              contentType:        "application/json",
-              payload:            JSON.stringify(largePayload),
-              muteHttpExceptions: true
-            });
-            var largeBody = JSON.parse(largeRes.getContentText());
-            if (largeRes.getResponseCode() === 202) {
-              return CardService.newActionResponseBuilder()
-                .setNavigation(CardService.newNavigation().updateCard(
-                  buildStatusCard("⏳ File is " + Math.round(fileSizeMB) + "MB — downloading and splitting into 40MB parts.\n\nClick 'Check Status' in a few minutes.", largeBody.job_id)
-                ))
-                .build();
-            }
+            return CardService.newActionResponseBuilder()
+              .setNotification(CardService.newNotification().setText(
+                "⚠️ File is " + Math.round(fileSizeMB) + "MB — too large for the free server (max 400MB). The server only has 512MB RAM and will crash. Try a smaller file or upgrade Render to a paid plan."
+              ))
+              .build();
           }
         } catch(err) {
           // Can't check size — warn user but allow download
