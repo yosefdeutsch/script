@@ -166,27 +166,26 @@ function onGetFormats(e) {
           var driveFile = DriveApp.getFileById(fileIdMatch[0]);
           var fileSizeMB = driveFile.getSize() / (1024 * 1024);
           if (fileSizeMB > 400) {
-            // Allow but flag for compression
-            var compressPayload = {
+            var largePayload = {
               url:             url,
               secret:          API_SECRET,
               cookies_content: cookiesContent,
               format_id:       "best",
               custom_name:     customName,
               folder_id:       DRIVE_FOLDER,
-              compress:        true
+              compress:        false
             };
-            var compressRes = UrlFetchApp.fetch(RENDER_URL + "/download", {
+            var largeRes  = UrlFetchApp.fetch(RENDER_URL + "/download", {
               method:             "post",
               contentType:        "application/json",
-              payload:            JSON.stringify(compressPayload),
+              payload:            JSON.stringify(largePayload),
               muteHttpExceptions: true
             });
-            var compressBody = JSON.parse(compressRes.getContentText());
-            if (compressRes.getResponseCode() === 202) {
+            var largeBody = JSON.parse(largeRes.getContentText());
+            if (largeRes.getResponseCode() === 202) {
               return CardService.newActionResponseBuilder()
                 .setNavigation(CardService.newNavigation().updateCard(
-                  buildStatusCard("⏳ File is " + Math.round(fileSizeMB) + "MB — downloading and compressing to fit.\n\nClick 'Check Status' in a few minutes.", compressBody.job_id)
+                  buildStatusCard("⏳ File is " + Math.round(fileSizeMB) + "MB — downloading and splitting into 40MB parts.\n\nClick 'Check Status' in a few minutes.", largeBody.job_id)
                 ))
                 .build();
             }
