@@ -30,7 +30,8 @@ function buildMainCard(url, statusMsg) {
     .setHint("Leave empty to use original title");
 
   // Check if there's an active job
-  var activeJobId = PropertiesService.getUserProperties().getProperty("active_job_id");
+  var activeJobId    = PropertiesService.getUserProperties().getProperty("active_job_id");
+  var activePartIdx  = PropertiesService.getUserProperties().getProperty("active_part_index") || "0";
   var getFormatsBtn = CardService.newTextButton()
     .setText("🔍 Get Available Formats")
     .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
@@ -51,11 +52,11 @@ function buildMainCard(url, statusMsg) {
   // Show resume button if there's an active job
   if (activeJobId) {
     var resumeJobBtn = CardService.newTextButton()
-      .setText("▶️ Resume Active Download")
+      .setText("▶️ Resume Active Download (Part " + (parseInt(activePartIdx)+1) + ")")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: activeJobId, part_index: "0" })
+          .setParameters({ job_id: activeJobId, part_index: activePartIdx })
       );
     section.addWidget(resumeJobBtn);
   }
@@ -348,6 +349,10 @@ function onCheckStatus(e) {
   var jobId     = e.parameters.job_id;
   var partIndex = parseInt(e.parameters.part_index !== undefined ? e.parameters.part_index : "0");
   if (isNaN(partIndex)) partIndex = 0;
+
+  // Save progress so resume works after addon refresh
+  PropertiesService.getUserProperties().setProperty("active_job_id", jobId);
+  PropertiesService.getUserProperties().setProperty("active_part_index", String(partIndex));
 
   try {
     // Check if this specific part is ready
