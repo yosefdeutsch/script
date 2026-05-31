@@ -276,7 +276,7 @@ function onGetFormats(e) {
 
       // For video mode, require size and skip audio-only formats
       if (isAudioOnly) continue;
-      var sizeMatch = line.match(/\|\s*~?([\d.]+)(MiB|GiB)\s/);
+      var sizeMatch = line.match(/\|\s*[~≈]?([\d.]+)(MiB|GiB)\s/);
       if (!sizeMatch) continue;
 
       var sizeNum  = parseFloat(sizeMatch[1]);
