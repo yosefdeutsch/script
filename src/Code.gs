@@ -481,7 +481,7 @@ function debugJob() {
   Logger.log(response.getContentText());
 }
 function debugLatest() {
-  var jobId = "a72acc8e-4554-455f-83d1-dc5d01396489";
+  var jobId = "0a00b5cc-6093-40dd-8517-318437f7ce33";
   var response = UrlFetchApp.fetch(
     RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
     { muteHttpExceptions: true }
