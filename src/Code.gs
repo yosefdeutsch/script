@@ -32,6 +32,11 @@ function buildMainCard(url, statusMsg) {
   // Check if there's an active job
   var activeJobId    = PropertiesService.getUserProperties().getProperty("active_job_id");
   var activePartIdx  = PropertiesService.getUserProperties().getProperty("active_part_index") || "0";
+  var audioSwitch = CardService.newSelectionInput()
+    .setType(CardService.SelectionInputType.CHECK_BOX)
+    .setFieldName("audio_only")
+    .addItem("🎵 Audio only (MP3)", "yes", false);
+
   var getFormatsBtn = CardService.newTextButton()
     .setText("🔍 Get Available Formats")
     .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
@@ -46,6 +51,7 @@ function buildMainCard(url, statusMsg) {
   section.addWidget(urlInput);
   section.addWidget(cookiesInput);
   section.addWidget(nameInput);
+  section.addWidget(audioSwitch);
   section.addWidget(getFormatsBtn);
   section.addWidget(historyBtn);
 
@@ -68,7 +74,7 @@ function buildMainCard(url, statusMsg) {
 }
 
 // ── Format picker card ─────────────────────────────────────────────────────
-function buildFormatCard(url, cookiesFileId, customName, formats) {
+function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("📋 Choose Format");
 
@@ -83,14 +89,15 @@ function buildFormatCard(url, cookiesFileId, customName, formats) {
   }
 
   var downloadBtn = CardService.newTextButton()
-    .setText("⬇️ Download Selected Format")
+    .setText(audioOnly ? "🎵 Download Audio (MP3)" : "⬇️ Download Selected Format")
     .setOnClickAction(
       CardService.newAction()
         .setFunctionName("onDownloadFormat")
         .setParameters({
-          url:            url,
+          url:             url,
           cookies_file_id: cookiesFileId,
-          custom_name:    customName
+          custom_name:     customName,
+          audio_only:      audioOnly ? "yes" : "no"
         })
     );
 
@@ -152,6 +159,7 @@ function onGetFormats(e) {
   var url           = e.formInput.video_url.trim();
   var cookiesFileId = e.formInput.cookies_file_id ? e.formInput.cookies_file_id.trim() : "";
   var customName    = e.formInput.custom_name ? e.formInput.custom_name.trim() : "";
+  var audioOnly     = (e.formInput.audio_only && e.formInput.audio_only.indexOf("yes") !== -1);
 
   if (!url) {
     return CardService.newActionResponseBuilder()
@@ -241,7 +249,7 @@ function onGetFormats(e) {
         .build();
     }
 
-    // Parse format lines — skip anything over 400MB
+    // Parse format lines
     var formats = [];
     var lines   = stdout.split("\n");
     for (var i = 0; i < lines.length; i++) {
@@ -261,15 +269,28 @@ function onGetFormats(e) {
       var sizeUnit = sizeMatch[2];
       var sizeMB   = sizeUnit === "GiB" ? sizeNum * 1024 : sizeNum;
 
-      // Skip formats over 400MB
       if (sizeMB > 400) continue;
 
       var label = id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2];
-      formats.push({ id: id, label: label });
+
+      // Filter based on audio_only
+      if (audioOnly) {
+        if (resolution === "audio" || line.indexOf("audio only") !== -1) {
+          formats.push({ id: id, label: "🎵 " + label });
+        }
+      } else {
+        if (resolution !== "audio" && line.indexOf("audio only") === -1) {
+          formats.push({ id: id, label: label });
+        }
+      }
     }
 
-    // Add "best" option at top
-    formats.unshift({ id: "best", label: "🏆 Best available — auto (≤400MB only)" });
+    // Add best option at top
+    if (audioOnly) {
+      formats.unshift({ id: "bestaudio", label: "🏆 Best audio (auto)" });
+    } else {
+      formats.unshift({ id: "best", label: "🏆 Best available — auto (≤400MB only)" });
+    }
 
     if (formats.length <= 1) {
       return CardService.newActionResponseBuilder()
@@ -277,7 +298,7 @@ function onGetFormats(e) {
         .build();
     }
 
-    var newCard = buildFormatCard(url, cookiesFileId, customName, formats);
+    var newCard = buildFormatCard(url, cookiesFileId, customName, formats, audioOnly);
     return CardService.newActionResponseBuilder()
       .setNavigation(CardService.newNavigation().updateCard(newCard))
       .build();
@@ -296,6 +317,7 @@ function onDownloadFormat(e) {
   var cookiesFileId = e.parameters.cookies_file_id || "";
   var customName    = e.parameters.custom_name || "";
 
+  var audioOnly = e.parameters.audio_only === "yes";
   var cookiesContent = "";
   if (cookiesFileId) {
     try {
@@ -314,7 +336,8 @@ function onDownloadFormat(e) {
       cookies_content: cookiesContent,
       format_id:       formatId,
       custom_name:     customName,
-      folder_id:       DRIVE_FOLDER
+      folder_id:       DRIVE_FOLDER,
+      audio_only:      audioOnly
     };
 
     var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
@@ -426,8 +449,9 @@ function onCheckStatus(e) {
     if (match) {
       fname = match[1].replace(/['"]/g, "").trim();
     }
+    var isAudio = fname.endsWith(".mp3");
     blob.setName(fname);
-    blob.setContentType("video/mp4");
+    blob.setContentType(isAudio ? "audio/mpeg" : "video/mp4");
 
     var saved   = targetFolder.createFile(blob);
     var nextIndex = partIndex + 1;
