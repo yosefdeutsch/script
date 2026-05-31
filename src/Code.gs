@@ -275,12 +275,13 @@ function onGetFormats(e) {
       var label = id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2];
 
       // Filter based on audio_only
+      var isAudioOnly = line.indexOf("audio only") !== -1;
       if (audioOnly) {
-        if (resolution === "audio" || line.indexOf("audio only") !== -1) {
+        if (isAudioOnly) {
           formats.push({ id: id, label: "🎵 " + label });
         }
       } else {
-        if (resolution !== "audio" && line.indexOf("audio only") === -1) {
+        if (!isAudioOnly) {
           formats.push({ id: id, label: label });
         }
       }
