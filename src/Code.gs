@@ -210,9 +210,10 @@ function onGetFormats(e) {
       url:             url,
       secret:          API_SECRET,
       cookies_content: cookiesContent,
-      format_id:       "best",
+      format_id:       audioOnly ? "bestaudio" : "best",
       custom_name:     customName,
-      folder_id:       DRIVE_FOLDER
+      folder_id:       DRIVE_FOLDER,
+      audio_only:      audioOnly
     };
     var directRes = UrlFetchApp.fetch(RENDER_URL + "/download", {
       method:             "post",
