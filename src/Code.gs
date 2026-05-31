@@ -261,30 +261,30 @@ function onGetFormats(e) {
       var id         = match[1];
       var ext        = match[2];
       var resolution = match[3];
+      var isAudioOnly = line.indexOf("audio only") !== -1;
 
-      // Extract file size
+      // For audio only mode, skip size check and just show audio formats
+      if (audioOnly) {
+        if (isAudioOnly) {
+          var sizeMatch = line.match(/\|\s*~?([\d.]+)(MiB|GiB)\s/);
+          var sizeLabel = sizeMatch ? sizeMatch[1] + sizeMatch[2] : "?MB";
+          formats.push({ id: id, label: "🎵 " + id + " | " + ext + " | " + sizeLabel });
+        }
+        continue;
+      }
+
+      // For video mode, require size and skip audio-only formats
+      if (isAudioOnly) continue;
       var sizeMatch = line.match(/\|\s*~?([\d.]+)(MiB|GiB)\s/);
       if (!sizeMatch) continue;
 
       var sizeNum  = parseFloat(sizeMatch[1]);
       var sizeUnit = sizeMatch[2];
       var sizeMB   = sizeUnit === "GiB" ? sizeNum * 1024 : sizeNum;
-
       if (sizeMB > 400) continue;
 
       var label = id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2];
-
-      // Filter based on audio_only
-      var isAudioOnly = line.indexOf("audio only") !== -1;
-      if (audioOnly) {
-        if (isAudioOnly) {
-          formats.push({ id: id, label: "🎵 " + label });
-        }
-      } else {
-        if (!isAudioOnly) {
-          formats.push({ id: id, label: label });
-        }
-      }
+      formats.push({ id: id, label: label });
     }
 
     // Add best option at top
