@@ -178,8 +178,9 @@ function onGetFormats(e) {
     }
   }
 
-  // m3u8, direct video files, and Google Drive — skip format picker, download directly
-  if (url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1 || url.indexOf("drive.google.com") !== -1) {
+  // YouTube audio, m3u8, direct video files, and Google Drive — skip format picker
+  var isYouTube = url.indexOf("youtube.com") !== -1 || url.indexOf("youtu.be") !== -1;
+  if (audioOnly && isYouTube || url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1 || url.indexOf("drive.google.com") !== -1) {
 
     // For Google Drive links, check file size first
     if (url.indexOf("drive.google.com") !== -1) {
