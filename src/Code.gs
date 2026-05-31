@@ -327,7 +327,10 @@ function onDownloadFormat(e) {
 
     if (code === 202) {
       // Save job ID so it survives addon refreshes
+      if (code === 202) {
       PropertiesService.getUserProperties().setProperty("active_job_id", body.job_id);
+      PropertiesService.getUserProperties().setProperty("active_part_index", "0");
+      var newCard = buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", body.job_id);
       var newCard = buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", body.job_id);
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(newCard))
