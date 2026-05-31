@@ -214,6 +214,8 @@ function onGetFormats(e) {
     });
     var directBody = JSON.parse(directRes.getContentText());
     if (directRes.getResponseCode() === 202) {
+      PropertiesService.getUserProperties().setProperty("active_job_id", directBody.job_id);
+      PropertiesService.getUserProperties().setProperty("active_part_index", "0");
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(
           buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", directBody.job_id)
