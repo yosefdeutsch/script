@@ -561,3 +561,7 @@ function onViewHistory(e) {
     .setNavigation(CardService.newNavigation().pushCard(buildHistoryCard()))
     .build();
 }
+function checkProperties() {
+  var props = PropertiesService.getUserProperties().getProperties();
+  Logger.log(JSON.stringify(props));
+}
