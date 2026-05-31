@@ -445,23 +445,31 @@ function onCheckStatus(e) {
     }
 
     // Save this part
-    var blob        = fileRes.getBlob();
-    var fname       = "video_part" + String(partIndex+1).padStart(3,"0") + ".mp4";
-    var disposition = (fileRes.getHeaders()["Content-Disposition"] || fileRes.getHeaders()["content-disposition"] || "");
-    var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-    if (match) {
-      fname = match[1].replace(/['"]/g, "").trim();
+    var blob    = fileRes.getBlob();
+    var isAudio = customName.toLowerCase().endsWith(".mp3") ||
+                  (fileRes.getHeaders()["Content-Type"] || "").indexOf("audio") !== -1;
+    var ext     = isAudio ? ".mp3" : ".mp4";
+    var fname;
+
+    if (customName && totalParts === 1) {
+      fname = customName.replace(/\.(mp4|mp3)$/i, "") + ext;
+    } else if (customName && totalParts > 1) {
+      fname = customName.replace(/\.(mp4|mp3)$/i, "") + "_part" + String(partIndex+1).padStart(3,"0") + ext;
+    } else {
+      var disposition = (fileRes.getHeaders()["Content-Disposition"] || fileRes.getHeaders()["content-disposition"] || "");
+      var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+      fname = match ? match[1].replace(/['"]/g, "").trim() : "video_part" + String(partIndex+1).padStart(3,"0") + ext;
     }
-    var isAudio = fname.endsWith(".mp3");
+
     blob.setName(fname);
     blob.setContentType(isAudio ? "audio/mpeg" : "video/mp4");
 
-    var saved   = targetFolder.createFile(blob);
+    var saved     = targetFolder.createFile(blob);
     var nextIndex = partIndex + 1;
-    var msg     = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
+    var msg       = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
 
     if (totalParts > 1 && customName) {
-      msg += "\n📂 Saved in folder: " + customName.replace(/\.mp4$/i, "");
+      msg += "\n📂 Saved in folder: " + customName.replace(/\.(mp4|mp3)$/i, "");
     }
 
     if (nextIndex < totalParts || info.job_status !== "done") {
