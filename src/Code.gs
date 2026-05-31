@@ -29,6 +29,8 @@ function buildMainCard(url, statusMsg) {
     .setTitle("File name (optional)")
     .setHint("Leave empty to use original title");
 
+  // Check if there's an active job
+  var activeJobId = PropertiesService.getUserProperties().getProperty("active_job_id");
   var getFormatsBtn = CardService.newTextButton()
     .setText("🔍 Get Available Formats")
     .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
@@ -45,6 +47,18 @@ function buildMainCard(url, statusMsg) {
   section.addWidget(nameInput);
   section.addWidget(getFormatsBtn);
   section.addWidget(historyBtn);
+
+  // Show resume button if there's an active job
+  if (activeJobId) {
+    var resumeJobBtn = CardService.newTextButton()
+      .setText("▶️ Resume Active Download")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("onCheckStatus")
+          .setParameters({ job_id: activeJobId, part_index: "0" })
+      );
+    section.addWidget(resumeJobBtn);
+  }
   statusSection.addWidget(statusText);
 
   card.addSection(section);
@@ -436,6 +450,8 @@ function onCheckStatus(e) {
       );
 
       msg += "\n\n🎉 All " + totalParts + " parts saved! Play them in order.";
+      // Clear active job
+      PropertiesService.getUserProperties().deleteProperty("active_job_id");
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null)))
         .build();
