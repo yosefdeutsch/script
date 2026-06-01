@@ -645,3 +645,14 @@ function checkLastError() {
   var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
+function checkCookies() {
+  var cookiesId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
+  Logger.log("Cookies ID: " + cookiesId);
+  try {
+    var content = DriveApp.getFileById(cookiesId).getBlob().getDataAsString();
+    Logger.log("Cookies length: " + content.length);
+    Logger.log("First 200 chars: " + content.substring(0, 200));
+  } catch(e) {
+    Logger.log("Error: " + e.message);
+  }
+}
