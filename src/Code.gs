@@ -668,3 +668,8 @@ function checkRunning() {
   var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
+function checkRunning() {
+  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
+  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
+  Logger.log(response.getContentText());
+}
