@@ -480,9 +480,17 @@ function onCheckStatus(e) {
     } else if (customName && totalParts > 1) {
       fname = customName.replace(/\.(mp4|mp3)$/i, "") + "_part" + String(partIndex+1).padStart(3,"0") + ext;
     } else {
-      var disposition = (fileRes.getHeaders()["Content-Disposition"] || fileRes.getHeaders()["content-disposition"] || "");
-      var match       = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-      fname = match ? match[1].replace(/['"]/g, "").trim() : "video_part" + String(partIndex+1).padStart(3,"0") + ext;
+      // Get real filename from server (preserves Hebrew and Unicode)
+      try {
+        var fnameRes  = UrlFetchApp.fetch(
+          RENDER_URL + "/filename/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
+          { muteHttpExceptions: true }
+        );
+        var fnameData = JSON.parse(fnameRes.getContentText());
+        fname = fnameData.filename || "video_part" + String(partIndex+1).padStart(3,"0") + ext;
+      } catch(err) {
+        fname = "video_part" + String(partIndex+1).padStart(3,"0") + ext;
+      }
     }
 
     blob.setName(fname);
