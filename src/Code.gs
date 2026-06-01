@@ -253,8 +253,15 @@ function onGetFormats(e) {
     var stdout = body.stdout || "";
 
     if (!stdout || body.stderr) {
+      var errText = body.stderr || "Unknown error";
+      var msg;
+      if (errText.indexOf("Sign in") !== -1 || errText.indexOf("bot") !== -1 || errText.indexOf("rotated") !== -1 || errText.indexOf("cookies") !== -1) {
+        msg = "❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Press 'Get Formats' again.";
+      } else {
+        msg = "❌ Could not get formats: " + errText.substring(0, 200);
+      }
       return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Could not get formats: " + (body.stderr || "Unknown error").substring(0, 200)))
+        .setNotification(CardService.newNotification().setText(msg))
         .build();
     }
 
