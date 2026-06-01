@@ -187,6 +187,24 @@ function onGetFormats(e) {
 
   // YouTube audio, m3u8, direct video files, and Google Drive — skip format picker
   var isYouTube = url.indexOf("youtube.com") !== -1 || url.indexOf("youtu.be") !== -1;
+
+  // For YouTube audio — verify cookies work before downloading
+  if (audioOnly && isYouTube) {
+    var checkRes = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
+      muteHttpExceptions: true
+    });
+    var checkBody  = JSON.parse(checkRes.getContentText());
+    var checkErr   = checkBody.stderr || "";
+    if (checkErr.indexOf("Sign in") !== -1 || checkErr.indexOf("bot") !== -1 || checkErr.indexOf("rotated") !== -1 || checkErr.indexOf("cookies") !== -1) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Press 'Get Formats' again."))
+        .build();
+    }
+  }
+
   if (audioOnly && isYouTube || url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1 || url.indexOf("drive.google.com") !== -1) {
 
     // For Google Drive links, check file size first
