@@ -640,3 +640,8 @@ function debugAudioFormats() {
 function saveCookiesId() {
   PropertiesService.getUserProperties().setProperty("youtube_cookies_id", "1SSbEUsKzMtg9u86slxc5qC_3gmB4Q2Hu");
 }
+function checkLastError() {
+  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
+  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  Logger.log(response.getContentText());
+}
