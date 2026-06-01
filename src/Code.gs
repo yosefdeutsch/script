@@ -434,15 +434,7 @@ function onCheckStatus(e) {
       var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
       var job       = JSON.parse(statusRes.getContentText());
       var errMsg    = job.message || "";
-      if (errMsg.indexOf("Sign in") !== -1 || errMsg.indexOf("bot") !== -1) {
-        if (errMsg.indexOf("cookies") !== -1 || errMsg.indexOf("Sign in") !== -1) {
-          errMsg = "❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Try again.";
-        } else {
-          errMsg = "❌ " + errMsg;
-        }
-      } else {
-        errMsg = "❌ " + errMsg;
-      }
+      errMsg = "❌ " + errMsg;
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(errMsg, null)))
         .build();
