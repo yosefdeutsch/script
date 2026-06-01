@@ -19,10 +19,12 @@ function buildMainCard(url, statusMsg) {
     .setHint("YouTube link.")
     .setValue(url || "");
 
+  var savedCookiesId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
   var cookiesInput = CardService.newTextInput()
     .setFieldName("cookies_file_id")
-    .setTitle("Cookies file ID in Drive (optional)")
-    .setHint("For protected sites like YouTube");
+    .setTitle("YouTube Cookies file ID")
+    .setHint("Paste once — saved automatically")
+    .setValue(savedCookiesId);
 
   var nameInput = CardService.newTextInput()
     .setFieldName("custom_name")
@@ -165,6 +167,13 @@ function onGetFormats(e) {
     return CardService.newActionResponseBuilder()
       .setNotification(CardService.newNotification().setText("⚠️ Please paste a video URL first."))
       .build();
+  }
+
+  // Save cookies ID permanently if provided
+  if (cookiesFileId) {
+    PropertiesService.getUserProperties().setProperty("youtube_cookies_id", cookiesFileId);
+  } else {
+    cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
   }
 
   var cookiesContent = "";
@@ -321,6 +330,13 @@ function onDownloadFormat(e) {
   var customName    = e.parameters.custom_name || "";
 
   var audioOnly = e.parameters.audio_only === "yes";
+  // Save cookies ID permanently if provided
+  if (cookiesFileId) {
+    PropertiesService.getUserProperties().setProperty("youtube_cookies_id", cookiesFileId);
+  } else {
+    cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
+  }
+
   var cookiesContent = "";
   if (cookiesFileId) {
     try {
@@ -394,8 +410,14 @@ function onCheckStatus(e) {
     if (info.job_status === "error") {
       var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
       var job       = JSON.parse(statusRes.getContentText());
+      var errMsg    = job.message || "";
+      if (errMsg.indexOf("Sign in") !== -1 || errMsg.indexOf("cookies") !== -1 || errMsg.indexOf("bot") !== -1) {
+        errMsg = "❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Click 'Check Again' to retry.";
+      } else {
+        errMsg = "❌ " + errMsg;
+      }
       return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ " + job.message, null)))
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(errMsg, null, jobId, 0)))
         .build();
     }
 
@@ -616,4 +638,7 @@ function debugAudioFormats() {
     })
   });
   Logger.log(response.getContentText());
+}
+function saveCookiesId() {
+  PropertiesService.getUserProperties().setProperty("youtube_cookies_id", "1SSbEUsKzMtg9u86slxc5qC_3gmB4Q2Hu");
 }
