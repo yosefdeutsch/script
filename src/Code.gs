@@ -19,12 +19,11 @@ function buildMainCard(url, statusMsg) {
     .setHint("YouTube link.")
     .setValue(url || "");
 
-  var savedCookiesId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
   var cookiesInput = CardService.newTextInput()
     .setFieldName("cookies_file_id")
-    .setTitle("YouTube Cookies file ID")
-    .setHint("Paste once — saved automatically")
-    .setValue(savedCookiesId);
+    .setTitle("Cookies file ID (optional)")
+    .setHint("Only needed to change cookies file")
+    .setValue("");
 
   var nameInput = CardService.newTextInput()
     .setFieldName("custom_name")
@@ -51,7 +50,6 @@ function buildMainCard(url, statusMsg) {
   var statusText    = CardService.newTextParagraph().setText(statusMsg || "Paste a link and click Get Formats.");
 
   section.addWidget(urlInput);
-  section.addWidget(cookiesInput);
   section.addWidget(nameInput);
   section.addWidget(audioSwitch);
   section.addWidget(getFormatsBtn);
