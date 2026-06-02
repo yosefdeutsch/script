@@ -907,3 +907,19 @@ function debugLatestJob() {
   );
   Logger.log(response.getContentText());
 }
+function testSearch() {
+  var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
+  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+  
+  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+    method:             "post",
+    contentType:        "application/json",
+    payload:            JSON.stringify({
+      secret:          API_SECRET,
+      query:           "bach piano",
+      cookies_content: cookiesContent
+    }),
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
