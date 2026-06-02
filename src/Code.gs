@@ -1032,14 +1032,13 @@ function testSearch() {
   });
   Logger.log(response.getContentText());
 }
-function testSearchChannel() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+function testChannelSearch() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_search", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
       secret: API_SECRET,
-      query:  "Sruly Green",
-      page:   0
+      query:  "Sruly Green"
     }),
     muteHttpExceptions: true
   });
