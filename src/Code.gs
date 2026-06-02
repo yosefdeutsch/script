@@ -711,7 +711,8 @@ function onYouTubeSearch(query, audioOnly, cookiesContent) {
       payload:            JSON.stringify({
         secret:          API_SECRET,
         query:           query,
-        cookies_content: cookiesContent
+        cookies_content: cookiesContent,
+        page:            0
       }),
       muteHttpExceptions: true
     });
@@ -725,7 +726,7 @@ function onYouTubeSearch(query, audioOnly, cookiesContent) {
         .build();
     }
 
-    var newCard = buildSearchResultsCard(body.results, audioOnly);
+    var newCard = buildSearchResultsCard(body.results, audioOnly, query, body.has_more, body.next_page);
     return CardService.newActionResponseBuilder()
       .setNavigation(CardService.newNavigation().updateCard(newCard))
       .build();
@@ -737,7 +738,7 @@ function onYouTubeSearch(query, audioOnly, cookiesContent) {
   }
 }
 
-function buildSearchResultsCard(results, audioOnly) {
+function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("🔍 Search Results");
 
@@ -773,6 +774,21 @@ function buildSearchResultsCard(results, audioOnly) {
     section.addWidget(CardService.newDivider());
   }
 
+  if (hasMore) {
+    var loadMoreBtn = CardService.newTextButton()
+      .setText("➕ Load More Results")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("onLoadMoreResults")
+          .setParameters({
+            query:      query || "",
+            audio_only: audioOnly ? "yes" : "no",
+            next_page:  String(nextPage || 1)
+          })
+      );
+    section.addWidget(loadMoreBtn);
+  }
+
   var backBtn = CardService.newTextButton()
     .setText("← Back")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
@@ -780,6 +796,51 @@ function buildSearchResultsCard(results, audioOnly) {
 
   card.addSection(section);
   return card.build();
+}
+
+function onLoadMoreResults(e) {
+  var query     = e.parameters.query;
+  var audioOnly = e.parameters.audio_only === "yes";
+  var page      = parseInt(e.parameters.next_page || "1");
+
+  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
+  var cookiesContent = "";
+  if (cookiesFileId) {
+    try {
+      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+    } catch(err) {}
+  }
+
+  try {
+    var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify({
+        secret:          API_SECRET,
+        query:           query,
+        cookies_content: cookiesContent,
+        page:            page
+      }),
+      muteHttpExceptions: true
+    });
+
+    var body = JSON.parse(response.getContentText());
+    if (response.getResponseCode() !== 200 || !body.results) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ No more results found."))
+        .build();
+    }
+
+    var newCard = buildSearchResultsCard(body.results, audioOnly, query, body.has_more, body.next_page);
+    return CardService.newActionResponseBuilder()
+      .setNavigation(CardService.newNavigation().pushCard(newCard))
+      .build();
+
+  } catch(err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
+      .build();
+  }
 }
 
 function onDownloadSearchResult(e) {
