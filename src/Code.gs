@@ -11,12 +11,12 @@ function buildAddOn(e) {
 // ── Main card: URL input + Get Formats button ──────────────────────────────
 function buildMainCard(url, statusMsg) {
   var card    = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("🎬 YouTube Downloader");
+  var section = CardService.newCardSection().setHeader("🎬 Video Downloader");
 
   var urlInput = CardService.newTextInput()
     .setFieldName("video_url")
     .setTitle("Paste link or search YouTube")
-    .setHint("URL or search text (e.g. 'Bach piano sonata')")
+    .setHint("URL or search")
     .setValue(url || "");
 
   var cookiesInput = CardService.newTextInput()
@@ -39,7 +39,7 @@ function buildMainCard(url, statusMsg) {
     .addItem("🎵 Audio only (MP3)", "yes", false);
 
   var getFormatsBtn = CardService.newTextButton()
-    .setText("🔍 Get Available Formats")
+    .setText("🔍 Search")
     .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
 
   var historyBtn = CardService.newTextButton()
@@ -47,7 +47,7 @@ function buildMainCard(url, statusMsg) {
     .setOnClickAction(CardService.newAction().setFunctionName("onViewHistory"));
 
   var statusSection = CardService.newCardSection().setHeader("📊 Status");
-  var statusText    = CardService.newTextParagraph().setText(statusMsg || "Paste a link and click Get Formats.");
+  var statusText    = CardService.newTextParagraph().setText(statusMsg || "Paste a link and click Search.");
 
   section.addWidget(urlInput);
   section.addWidget(nameInput);
