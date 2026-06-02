@@ -538,17 +538,36 @@ function onCheckStatus(e) {
 
     var saved     = targetFolder.createFile(blob);
     var nextIndex = partIndex + 1;
-    var msg       = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName() + "\n🔗 " + saved.getUrl();
+    var msg       = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName();
 
     if (totalParts > 1 && customName) {
-      msg += "\n📂 Saved in folder: " + customName.replace(/\.(mp4|mp3)$/i, "");
+      msg += "\n📂 Folder: " + customName.replace(/\.(mp4|mp3)$/i, "");
     }
 
     if (nextIndex < totalParts || info.job_status !== "done") {
       msg += "\n\n⏳ More parts remaining.";
+      // Build card with open button + next part button
+      var card          = CardService.newCardBuilder();
+      var statusSection = CardService.newCardSection().setHeader("📊 Status");
+      statusSection.addWidget(CardService.newTextParagraph().setText(msg));
+      statusSection.addWidget(
+        CardService.newTextButton()
+          .setText("📂 Open in Drive")
+          .setOpenLink(CardService.newOpenLink().setUrl(saved.getUrl()))
+      );
+      statusSection.addWidget(
+        CardService.newTextButton()
+          .setText("▶️ Save Part " + (nextIndex + 1))
+          .setOnClickAction(
+            CardService.newAction()
+              .setFunctionName("onCheckStatus")
+              .setParameters({ job_id: jobId, part_index: String(nextIndex) })
+          )
+      );
       return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null, jobId, nextIndex)))
+        .setNavigation(CardService.newNavigation().updateCard(card.addSection(statusSection).build()))
         .build();
+
     } else {
       // All done — add to history
       var historyLinks = [];
@@ -557,17 +576,30 @@ function onCheckStatus(e) {
       } else {
         historyLinks.push(targetFolder.getUrl());
       }
-      addToHistory(
-        customName || fname,
-        totalParts,
-        historyLinks
-      );
+      addToHistory(customName || fname, totalParts, historyLinks);
 
-      msg += "\n\n🎉 All " + totalParts + " parts saved! Play them in order.";
+      msg += "\n\n🎉 All " + totalParts + " parts saved!";
+      if (totalParts > 1) msg += " Play them in order.";
+
       // Clear active job
       PropertiesService.getUserProperties().deleteProperty("active_job_id");
+
+      // Build card with open button
+      var card          = CardService.newCardBuilder();
+      var statusSection = CardService.newCardSection().setHeader("📊 Status");
+      statusSection.addWidget(CardService.newTextParagraph().setText(msg));
+      statusSection.addWidget(
+        CardService.newTextButton()
+          .setText("📂 Open in Drive")
+          .setOpenLink(CardService.newOpenLink().setUrl(totalParts > 1 ? targetFolder.getUrl() : saved.getUrl()))
+      );
+      statusSection.addWidget(
+        CardService.newTextButton()
+          .setText("⬇️ Download Another Video")
+          .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"))
+      );
       return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(msg, null)))
+        .setNavigation(CardService.newNavigation().updateCard(card.addSection(statusSection).build()))
         .build();
     }
 
