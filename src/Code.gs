@@ -1045,3 +1045,12 @@ function testSearchChannel() {
   });
   Logger.log(response.getContentText());
 }
+function debugChannel() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_channel", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ secret: API_SECRET }),
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
