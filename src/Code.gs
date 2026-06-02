@@ -15,8 +15,8 @@ function buildMainCard(url, statusMsg) {
 
   var urlInput = CardService.newTextInput()
     .setFieldName("video_url")
-    .setTitle("Paste video link")
-    .setHint("YouTube link.")
+    .setTitle("Paste link or search YouTube")
+    .setHint("URL or search text (e.g. 'Bach piano sonata')")
     .setValue(url || "");
 
   var cookiesInput = CardService.newTextInput()
@@ -163,8 +163,15 @@ function onGetFormats(e) {
 
   if (!url) {
     return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("⚠️ Please paste a video URL first."))
+      .setNotification(CardService.newNotification().setText("⚠️ Please paste a link or enter a search term."))
       .build();
+  }
+
+  // Detect if input is a URL or search query
+  var isUrl = url.indexOf("http://") === 0 || url.indexOf("https://") === 0;
+  if (!isUrl) {
+    // Treat as YouTube search
+    return onYouTubeSearch(url, audioOnly, cookiesContent);
   }
 
   // Save cookies ID permanently if provided
@@ -646,6 +653,200 @@ function onViewHistory(e) {
   return CardService.newActionResponseBuilder()
     .setNavigation(CardService.newNavigation().pushCard(buildHistoryCard()))
     .build();
+}
+// ── YouTube Search ─────────────────────────────────────────────────────────
+function onYouTubeSearch(query, audioOnly, cookiesContent) {
+  try {
+    var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify({
+        secret:          API_SECRET,
+        query:           query,
+        cookies_content: cookiesContent
+      }),
+      muteHttpExceptions: true
+    });
+
+    var code = response.getResponseCode();
+    var body = JSON.parse(response.getContentText());
+
+    if (code !== 200 || !body.results) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ No results found. Try different search terms."))
+        .build();
+    }
+
+    var newCard = buildSearchResultsCard(body.results, audioOnly);
+    return CardService.newActionResponseBuilder()
+      .setNavigation(CardService.newNavigation().updateCard(newCard))
+      .build();
+
+  } catch(err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("❌ Search failed: " + err.message))
+      .build();
+  }
+}
+
+function buildSearchResultsCard(results, audioOnly) {
+  var card    = CardService.newCardBuilder();
+  var section = CardService.newCardSection().setHeader("🔍 Search Results");
+
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+
+    // Thumbnail
+    try {
+      var img = CardService.newImage()
+        .setImageUrl(r.thumbnail)
+        .setAltText(r.title);
+      section.addWidget(img);
+    } catch(e) {}
+
+    // Title + info
+    var info = "🎬 " + r.title + "\n" +
+               "📺 " + r.channel + "\n" +
+               "⏱ " + r.duration + "   📅 " + r.date;
+    section.addWidget(CardService.newTextParagraph().setText(info));
+
+    // Download button
+    var downloadBtn = CardService.newTextButton()
+      .setText(audioOnly ? "🎵 Download MP3" : "⬇️ Download Video")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("onDownloadSearchResult")
+          .setParameters({
+            video_url:  r.url,
+            audio_only: audioOnly ? "yes" : "no"
+          })
+      );
+    section.addWidget(downloadBtn);
+    section.addWidget(CardService.newDivider());
+  }
+
+  var backBtn = CardService.newTextButton()
+    .setText("← Back")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+  section.addWidget(backBtn);
+
+  card.addSection(section);
+  return card.build();
+}
+
+function onDownloadSearchResult(e) {
+  var url       = e.parameters.video_url;
+  var audioOnly = e.parameters.audio_only === "yes";
+
+  // Get saved cookies
+  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
+  var cookiesContent = "";
+  if (cookiesFileId) {
+    try {
+      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+    } catch(err) {}
+  }
+
+  if (audioOnly) {
+    // Check cookies first
+    var checkRes  = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
+      muteHttpExceptions: true
+    });
+    var checkBody = JSON.parse(checkRes.getContentText());
+    var checkErr  = checkBody.stderr || "";
+    if (checkErr.indexOf("Sign in") !== -1 || checkErr.indexOf("bot") !== -1 ||
+        checkErr.indexOf("rotated") !== -1 || checkErr.indexOf("cookies") !== -1) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Search again."))
+        .build();
+    }
+
+    // Download audio directly
+    var payload = {
+      url:             url,
+      secret:          API_SECRET,
+      cookies_content: cookiesContent,
+      format_id:       "bestaudio",
+      custom_name:     "",
+      folder_id:       DRIVE_FOLDER,
+      audio_only:      true
+    };
+    var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    var body = JSON.parse(response.getContentText());
+    if (response.getResponseCode() === 202) {
+      PropertiesService.getUserProperties().setProperty("active_job_id", body.job_id);
+      PropertiesService.getUserProperties().setProperty("active_part_index", "0");
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(
+          buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", body.job_id)
+        ))
+        .build();
+    }
+
+  } else {
+    // Show format picker — same as normal video download
+    var formatsRes = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
+      muteHttpExceptions: true
+    });
+    var formatsBody = JSON.parse(formatsRes.getContentText());
+    var stdout      = formatsBody.stdout || "";
+    var stderr      = formatsBody.stderr || "";
+
+    if (!stdout || stderr) {
+      var errMsg = stderr;
+      if (errMsg.indexOf("Sign in") !== -1 || errMsg.indexOf("bot") !== -1 ||
+          errMsg.indexOf("rotated") !== -1 || errMsg.indexOf("cookies") !== -1) {
+        return CardService.newActionResponseBuilder()
+          .setNotification(CardService.newNotification().setText("❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Search again."))
+          .build();
+      }
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ Could not get formats: " + errMsg.substring(0, 200)))
+        .build();
+    }
+
+    // Parse formats
+    var formats = [];
+    var lines   = stdout.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var line  = lines[i].trim();
+      var match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+/);
+      if (!match) continue;
+      var id          = match[1];
+      var ext         = match[2];
+      var resolution  = match[3];
+      var isAudioOnly = line.indexOf("audio only") !== -1;
+      if (isAudioOnly) continue;
+      var sizeMatch = line.match(/\|\s*[~≈]?([\d.]+)(MiB|GiB)\s/);
+      if (!sizeMatch) continue;
+      var sizeMB = sizeMatch[2] === "GiB" ? parseFloat(sizeMatch[1]) * 1024 : parseFloat(sizeMatch[1]);
+      if (sizeMB > 400) continue;
+      formats.push({ id: id, label: id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2] });
+    }
+    formats.unshift({ id: "best", label: "🏆 Best available — auto (≤400MB only)" });
+
+    if (formats.length <= 1) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ No formats found."))
+        .build();
+    }
+
+    var newCard = buildFormatCard(url, "", "", formats, false);
+    return CardService.newActionResponseBuilder()
+      .setNavigation(CardService.newNavigation().updateCard(newCard))
+      .build();
+  }
 }
 function checkProperties() {
   var props = PropertiesService.getUserProperties().getProperties();
