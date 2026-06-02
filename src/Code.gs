@@ -154,16 +154,6 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
   return card.build();
 }
 
-// ── Footer Helper Function ──────────────────────────────────────────────────
-function getFooterSection() {
-  var footerImage = CardService.newImage()
-      // IMPORTANT: Replace the URL below with your actual hosted image URL
-      .setImageUrl("https://deutsch.great-site.net/wp-content/uploads/2026/06/VidBot-Logo.png")
-      .setAltText("Developed by YD © 2026");
-
-  return CardService.newCardSection().addWidget(footerImage);
-}
-
 // ── Get Formats button clicked ─────────────────────────────────────────────
 function onGetFormats(e) {
   var url           = e.formInput.video_url.trim();
