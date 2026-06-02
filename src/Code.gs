@@ -476,13 +476,29 @@ function onCheckStatus(e) {
     var customName  = jobInfo.custom_name || "";
 
     // Determine target folder
-    // Create subfolder only if multiple parts and has custom name
     var targetFolder;
-    if (totalParts > 1 && customName) {
-      // Check if subfolder already exists
-      var subFolderName = customName.replace(/\.mp4$/i, "");
-      var rootFolder    = DriveApp.getFolderById(DRIVE_FOLDER);
-      var existing      = rootFolder.getFoldersByName(subFolderName);
+    if (totalParts > 1) {
+      // Get folder name — use custom name or real video title
+      var subFolderName = "";
+      if (customName) {
+        subFolderName = customName.replace(/\.(mp4|mp3)$/i, "");
+      } else {
+        // Get real filename from server
+        try {
+          var fnameRes2  = UrlFetchApp.fetch(
+            RENDER_URL + "/filename/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
+            { muteHttpExceptions: true }
+          );
+          var fnameData2 = JSON.parse(fnameRes2.getContentText());
+          var realFname  = fnameData2.filename || "";
+          subFolderName  = realFname.replace(/\.(mp4|mp3|mkv|webm)$/i, "").replace(/_part\d+$/i, "");
+        } catch(err) {
+          subFolderName = "video_" + jobId.substring(0, 8);
+        }
+      }
+
+      var rootFolder = DriveApp.getFolderById(DRIVE_FOLDER);
+      var existing   = rootFolder.getFoldersByName(subFolderName);
       if (existing.hasNext()) {
         targetFolder = existing.next();
       } else {
