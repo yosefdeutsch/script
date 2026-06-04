@@ -439,10 +439,22 @@ function onCheckStatus(e) {
       info = JSON.parse(partRes.getContentText());
     } catch(err) {
       return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("⚠️ Server is waking up, try again in 30 seconds."))
+        .setNotification(CardService.newNotification().setText("❌ Server restarted — job was lost. Please download again."))
         .build();
     }
 
+    // Job not found — server restarted
+    if (info.status === "not_found" || partRes.getResponseCode() === 404) {
+      PropertiesService.getUserProperties().deleteProperty("active_job_id");
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ Server restarted and job was lost.\n\nPlease download again.", null)))
+        .build();
+    }
+
+    // Job failed
+    if (info.job_status === "error") {
+      var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+      var job       = JSON.parse(statusRes.getContentText());
     // Job failed
     if (info.job_status === "error") {
       var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
