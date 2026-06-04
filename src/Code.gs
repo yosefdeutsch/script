@@ -438,8 +438,15 @@ function onCheckStatus(e) {
     try {
       info = JSON.parse(partRes.getContentText());
     } catch(err) {
+      // HTML response means server error or cold start
+      if (partRes.getResponseCode() === 404) {
+        PropertiesService.getUserProperties().deleteProperty("active_job_id");
+        return CardService.newActionResponseBuilder()
+          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ Server restarted and job was lost.\n\nPlease download again.", null)))
+          .build();
+      }
       return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Server restarted — job was lost. Please download again."))
+        .setNotification(CardService.newNotification().setText("⚠️ Server error. Try again in 30 seconds."))
         .build();
     }
 
