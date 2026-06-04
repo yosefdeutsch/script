@@ -434,7 +434,14 @@ function onCheckStatus(e) {
       RENDER_URL + "/part_ready/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
       { muteHttpExceptions: true }
     );
-    var info = JSON.parse(partRes.getContentText());
+    var info;
+    try {
+      info = JSON.parse(partRes.getContentText());
+    } catch(err) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("⚠️ Server is waking up, try again in 30 seconds."))
+        .build();
+    }
 
     // Job failed
     if (info.job_status === "error") {
@@ -470,8 +477,13 @@ function onCheckStatus(e) {
     }
 
     // Get job info for custom name and total parts
-    var statusRes2  = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-    var jobInfo     = JSON.parse(statusRes2.getContentText());
+    var statusRes2 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+    var jobInfo;
+    try {
+      jobInfo = JSON.parse(statusRes2.getContentText());
+    } catch(err) {
+      jobInfo = {};
+    }
     var totalParts  = info.total || 1;
     var customName  = jobInfo.custom_name || "";
 
