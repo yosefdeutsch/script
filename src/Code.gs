@@ -108,10 +108,15 @@ function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
         })
     );
 
+  var homeBtn = CardService.newTextButton()
+    .setText("🏠 Home")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+
   var backBtn = CardService.newTextButton()
     .setText("← Back")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
 
+  section.addWidget(homeBtn);
   section.addWidget(formatSelect);
   section.addWidget(downloadBtn);
   section.addWidget(backBtn);
@@ -123,6 +128,13 @@ function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
 function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
   var card          = CardService.newCardBuilder();
   var statusSection = CardService.newCardSection().setHeader("📊 Status");
+
+  // Home button at top
+  var homeBtn = CardService.newTextButton()
+    .setText("🏠 Home")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+  statusSection.addWidget(homeBtn);
+
   var statusText    = CardService.newTextParagraph().setText(msg || "Working…");
   statusSection.addWidget(statusText);
 
