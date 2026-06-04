@@ -1128,3 +1128,15 @@ function checkLastStatus() {
   Logger.log("Code: " + response.getResponseCode());
   Logger.log("Body: " + response.getContentText().substring(0, 500));
 }
+function diagnose() {
+  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
+  Logger.log("Job ID: " + jobId);
+  
+  var r1 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
+  Logger.log("Status code: " + r1.getResponseCode());
+  Logger.log("Status body: " + r1.getContentText().substring(0, 300));
+  
+  var r2 = UrlFetchApp.fetch(RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
+  Logger.log("Part_ready code: " + r2.getResponseCode());
+  Logger.log("Part_ready body: " + r2.getContentText().substring(0, 300));
+}
