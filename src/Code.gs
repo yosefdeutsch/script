@@ -7,22 +7,25 @@ function sendEmailAlert(e) {
   var userEmail = "No email provided";
   var userName = "Not provided";
 
-  // --- 2. SAFELY EXTRACT FORM DATA ---
+  // --- 2. STOP IF RUN MANUALLY ---
+  // This is the shield that prevents the script from crashing if you click "Run" in the editor.
+  if (typeof e === "undefined") {
+    Logger.log("⚠️ STOP: You cannot click 'Run' to test this script. It only works when someone actually submits the Google Form.");
+    return; 
+  }
+
+  // --- 3. EXTRACT FORM DATA ---
   try {
-    // This ensures the script doesn't crash if it's run without form data
-    if (e && e.response) {
+    if (e.response) {
       userEmail = e.response.getRespondentEmail() || userEmail;
-      var itemResponses = e.response.getItemResponses();
+      var items = e.response.getItemResponses();
       
-      for (var i = 0; i < itemResponses.length; i++) {
-        var title = itemResponses[i].getItem().getTitle();
+      for (var i = 0; i < items.length; i++) {
+        var title = items[i].getItem().getTitle();
         if (title.includes("Name") || title.includes("שם")) {
-          userName = itemResponses[i].getResponse() || userName;
+          userName = items[i].getResponse() || userName;
         }
       }
-    } else {
-      Logger.log("Script was run manually, not by a form trigger. 'e' is undefined.");
-      return; // Stops the script safely if you accidentally click "Run" in the editor
     }
   } catch (error) {
     Logger.log("Error extracting form data: " + error.toString());
@@ -32,7 +35,7 @@ function sendEmailAlert(e) {
   var firstName = nameParts[0] || "Unknown";
   var lastName = nameParts.slice(1).join(" ") || "";
 
-  // --- 3. GOOGLE CONTACTS AUTOMATION ---
+  // --- 4. GOOGLE CONTACTS AUTOMATION ---
   var contactStatus = "Skipped/Failed";
   try {
     var newContact = {
@@ -44,8 +47,7 @@ function sendEmailAlert(e) {
     
     var groupName = "Group Registration";
     var groupResourceName = null;
-    var groupsResponse = People.ContactGroups.list();
-    var existingGroups = groupsResponse.contactGroups || [];
+    var existingGroups = People.ContactGroups.list().contactGroups || [];
     
     for (var j = 0; j < existingGroups.length; j++) {
       if (existingGroups[j].name === groupName) {
@@ -62,11 +64,10 @@ function sendEmailAlert(e) {
     People.ContactGroups.Members.modify({ resourceNamesToAdd: [personResourceName] }, groupResourceName);
     contactStatus = "Success";
   } catch (error) {
-    Logger.log("Contact failed: " + error.toString());
     contactStatus = "Failed (" + error.message + ")";
   }
 
-  // --- 4. GOOGLE DRIVE PROVISIONING ---
+  // --- 5. GOOGLE DRIVE PROVISIONING ---
   var driveStatus = "Skipped/Failed";
   try {
     if (userEmail && userEmail !== "No email provided") {
@@ -75,17 +76,15 @@ function sendEmailAlert(e) {
       driveStatus = "Success";
     }
   } catch (error) {
-    Logger.log("Drive sharing failed: " + error.toString());
     driveStatus = "Failed (" + error.message + ")";
   }
 
-  // --- 5. SEND EMAIL NOTIFICATION ---
+  // --- 6. SEND EMAIL NOTIFICATION ---
   try {
     var message = "Someone new has filled out the form:\n\n";
     message += "Name: " + userName + "\n";
     message += "Email: " + userEmail + "\n\n";
     
-    // This tells you exactly what worked and what didn't inside the email
     message += "--- Automation Status ---\n";
     message += "Contacts Saved: " + contactStatus + "\n";
     message += "Drive Access Granted: " + driveStatus + "\n";
