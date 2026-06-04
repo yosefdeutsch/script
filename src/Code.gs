@@ -889,7 +889,15 @@ function onDownloadSearchResult(e) {
       payload:            JSON.stringify(payload),
       muteHttpExceptions: true
     });
-    var body = JSON.parse(response.getContentText());
+    var rawText = response.getContentText();
+    var body;
+    try {
+      body = JSON.parse(rawText);
+    } catch(err) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ Server error. Try again in a moment."))
+        .build();
+    }
     if (response.getResponseCode() === 202) {
       PropertiesService.getUserProperties().setProperty("active_job_id", body.job_id);
       PropertiesService.getUserProperties().setProperty("active_part_index", "0");
@@ -908,7 +916,15 @@ function onDownloadSearchResult(e) {
       payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
       muteHttpExceptions: true
     });
-    var formatsBody = JSON.parse(formatsRes.getContentText());
+    var formatsRaw = formatsRes.getContentText();
+    var formatsBody;
+    try {
+      formatsBody = JSON.parse(formatsRaw);
+    } catch(err) {
+      return CardService.newActionResponseBuilder()
+        .setNotification(CardService.newNotification().setText("❌ Server error fetching formats. Try again."))
+        .build();
+    }
     var stdout      = formatsBody.stdout || "";
     var stderr      = formatsBody.stderr || "";
 
