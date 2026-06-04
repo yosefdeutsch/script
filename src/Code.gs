@@ -239,6 +239,17 @@ function onGetFormats(e) {
       }
     }
 
+    // For Drive files, get real filename if no custom name provided
+    if (!customName && url.indexOf("drive.google.com") !== -1) {
+      try {
+        var fileIdMatch2 = url.match(/[-\w]{25,}/);
+        if (fileIdMatch2) {
+          var driveFile2 = DriveApp.getFileById(fileIdMatch2[0]);
+          customName = driveFile2.getName();
+        }
+      } catch(err) {}
+    }
+
     var directPayload = {
       url:             url,
       secret:          API_SECRET,
