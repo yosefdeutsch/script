@@ -450,12 +450,25 @@ function onCheckStatus(e) {
         .build();
     }
 
-    // Job not found — server restarted
-    if (info.status === "not_found" || partRes.getResponseCode() === 404) {
-      PropertiesService.getUserProperties().deleteProperty("active_job_id");
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ Server restarted and job was lost.\n\nPlease download again.", null)))
-        .build();
+    // Job not found — either still starting or server restarted
+    if (info.status === "not_found") {
+      // Check if job exists at all
+      var checkRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+      var checkJob;
+      try { checkJob = JSON.parse(checkRes.getContentText()); } catch(e) { checkJob = {}; }
+      
+      if (checkRes.getResponseCode() === 404 || checkJob.error) {
+        // Job truly lost — server restarted
+        PropertiesService.getUserProperties().deleteProperty("active_job_id");
+        return CardService.newActionResponseBuilder()
+          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ Server restarted and job was lost.\n\nPlease download again.", null)))
+          .build();
+      } else {
+        // Job exists but part not ready yet
+        return CardService.newActionResponseBuilder()
+          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ Still downloading… not ready yet.\n\nClick 'Check Again' in ~30 seconds.", null, jobId, partIndex)))
+          .build();
+      }
     }
 
     // Job failed
