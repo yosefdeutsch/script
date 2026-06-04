@@ -68,8 +68,15 @@ function buildMainCard(url, statusMsg) {
   }
   statusSection.addWidget(statusText);
 
+  var imageSection = CardService.newCardSection();
+  var image = CardService.newImage()
+    .setImageUrl("https://deutsch.great-site.net/wp-content/uploads/2026/06/Logo-Page.png")
+    .setAltText("Video Downloader Bot");
+  imageSection.addWidget(image);
+
   card.addSection(section);
   card.addSection(statusSection);
+  card.addSection(imageSection);
   return card.build();
 }
 
