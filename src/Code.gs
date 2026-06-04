@@ -6,94 +6,46 @@ function sendEmailAlert(e) {
   var userEmail = "No email provided";
   var userName = "Not provided";
   
-  // Safety check to prevent crashing if there is no form data
+  // Safety check to ensure it doesn't crash if opened manually
   if (!e || !e.response) {
     return;
   }
   
-  // 1. EXTRACT FORM DATA
+  // 1. EXTRACT NAME AND EMAIL FROM FORM
   try {
-    userEmail = e.response.getRespondentEmail();
+    userEmail = e.response.getRespondentEmail() || userEmail;
     var items = e.response.getItemResponses();
     for (var i = 0; i < items.length; i++) {
-      var item = items[i];
-      var title = item.getItem().getTitle();
-      // Uses safe unicode code for the Hebrew word 'שם' to prevent copy-paste errors
+      var title = items[i].getItem().getTitle();
       if (title.indexOf("Name") !== -1 || title.indexOf("\u05e9\u05dd") !== -1) {
-        userName = item.getResponse();
+        userName = items[i].getResponse() || userName;
       }
     }
   } catch (err) {
-    // Failsafe for data extraction
+    // Fallback if data extraction fails
   }
   
-  var firstName = "Unknown";
-  var lastName = "";
-  if (userName) {
-    var nameParts = userName.split(" ");
-    firstName = nameParts[0];
-    if (nameParts.length > 1) {
-      nameParts.shift();
-      lastName = nameParts.join(" ");
-    }
-  }
-  
-  // 2. GOOGLE CONTACTS AUTOMATION
+  // 2. NATIVE GOOGLE DRIVE SHARING
+  var driveStatus = "Not processed";
   try {
-    var newContact = {
-      "names": [{ "givenName": firstName, "familyName": lastName }],
-      "emailAddresses": [{ "value": userEmail }]
-    };
-    var createdPerson = People.People.createContact(newContact);
-    var personResourceName = createdPerson.resourceName;
-    
-    var groupName = "Group Registration";
-    var groupResourceName = "";
-    
-    var listResponse = People.ContactGroups.list();
-    var existingGroups = listResponse.contactGroups;
-    if (existingGroups) {
-      for (var j = 0; j < existingGroups.length; j++) {
-        if (existingGroups[j].name === groupName) {
-          groupResourceName = existingGroups[j].resourceName;
-          break;
-        }
-      }
-    }
-    
-    if (!groupResourceName) {
-      var groupResource = {
-        "contactGroup": {
-          "name": groupName
-        }
-      };
-      var newGroup = People.ContactGroups.create(groupResource);
-      groupResourceName = newGroup.resourceName;
-    }
-    
-    var modifyRequest = {
-      "resourceNamesToAdd": [personResourceName]
-    };
-    People.ContactGroups.Members.modify(modifyRequest, groupResourceName);
-  } catch (err) {
-    // Failsafe for contacts
-  }
-  
-  // 3. GOOGLE DRIVE PROVISIONING
-  try {
-    if (userEmail && folderId) {
+    if (userEmail && userEmail !== "No email provided") {
       var folder = DriveApp.getFolderById(folderId);
       folder.addViewer(userEmail);
+      driveStatus = "Success";
     }
   } catch (err) {
-    // Failsafe for drive sharing
+    driveStatus = "Error: " + err.message;
   }
   
-  // 4. SEND EMAIL NOTIFICATION
+  // 3. SEND THE EMAIL NOTIFICATION
   try {
-    var message = "Someone new has filled out the form:\n\nName: " + userName + "\nEmail: " + userEmail;
+    var message = "Someone new has filled out the form:\n\n" +
+                  "Name: " + userName + "\n" +
+                  "Email: " + userEmail + "\n\n" +
+                  "Drive Folder Share Status: " + driveStatus;
+                  
     MailApp.sendEmail(myEmail, subject, message);
   } catch (err) {
-    // Failsafe for email delivery
+    // Fallback if email system fails
   }
 }
