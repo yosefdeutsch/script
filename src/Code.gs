@@ -2,7 +2,7 @@ function sendEmailAlert(e) {
   // --- 1. YOUR SETTINGS ---
   var myEmail = "tripsinbirkas@gmail.com"; 
   var folderId = "1-VJV-erm-TPEITzBa_1oe4eD1vqmESec"; // The Drive folder ID you just copied
-  var sortColumn = 2; // The column number in your Sheet to sort by (1=A, 2=B, 3=C, etc.)
+  var sortColumn = 4; // The column number in your Sheet to sort by (1=A, 2=B, 3=C, etc.)
   var subject = "New Group Sign-Up";
   
   // --- 2. EXTRACT FORM DATA ---
