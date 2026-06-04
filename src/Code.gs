@@ -709,6 +709,11 @@ function addToHistory(name, parts, links) {
 function buildHistoryCard() {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("🕐 Download History");
+
+  var backBtnTop = CardService.newTextButton()
+    .setText("← Back")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+  section.addWidget(backBtnTop);
   var history = getHistory();
 
   if (history.length === 0) {
@@ -792,6 +797,11 @@ function onYouTubeSearch(query, audioOnly, cookiesContent) {
 function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("🔍 Search Results");
+
+  var backBtnTop = CardService.newTextButton()
+    .setText("← Back")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+  section.addWidget(backBtnTop);
 
   for (var i = 0; i < results.length; i++) {
     var r = results[i];
