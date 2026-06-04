@@ -576,7 +576,7 @@ function onCheckStatus(e) {
     if (customName && totalParts === 1) {
       fname = customName.replace(/\.(mp4|mp3)$/i, "") + ext;
     } else if (customName && totalParts > 1) {
-      fname = customName.replace(/\.(mp4|mp3)$/i, "") + "_part" + String(partIndex+1).padStart(3,"0") + ext;
+      fname = customName.replace(/\.(mp4|mp3)$/i, "") + " - Part " + (partIndex+1) + ext;
     } else {
       // Get real filename from server (preserves Hebrew and Unicode)
       try {
@@ -585,7 +585,8 @@ function onCheckStatus(e) {
           { muteHttpExceptions: true }
         );
         var fnameData = JSON.parse(fnameRes.getContentText());
-        fname = fnameData.filename || "video_part" + String(partIndex+1).padStart(3,"0") + ext;
+        var baseName = (fnameData.filename || "video").replace(/\.(mp4|mp3|mkv|webm)$/i, "").replace(/_part\d+$/i, "");
+      fname = baseName + " - Part " + (partIndex+1) + ext;
       } catch(err) {
         fname = "video_part" + String(partIndex+1).padStart(3,"0") + ext;
       }
