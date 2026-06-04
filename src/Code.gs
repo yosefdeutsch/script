@@ -807,7 +807,7 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
     // Title + info
     var info = "🎬 " + r.title + "\n" +
                "📺 " + r.channel + "\n" +
-               "⏱ " + r.duration + "   📅 " + r.date;
+               (r.duration ? "⏱ " + r.duration + "   " : "") + "📅 " + r.date;
     section.addWidget(CardService.newTextParagraph().setText(info));
 
     // Download button
