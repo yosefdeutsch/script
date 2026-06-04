@@ -728,13 +728,15 @@ function addToHistory(name, parts, links) {
 }
 
 function buildHistoryCard() {
-  var card    = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("🕐 Download History");
-
+  var card       = CardService.newCardBuilder();
+  var navSection = CardService.newCardSection();
   var homeBtnTop = CardService.newTextButton()
     .setText("🏠 Home")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  section.addWidget(homeBtnTop);
+  navSection.addWidget(homeBtnTop);
+  card.addSection(navSection);
+
+  var section = CardService.newCardSection().setHeader("🕐 Download History");
   var history = getHistory();
 
   if (history.length === 0) {
@@ -816,13 +818,15 @@ function onYouTubeSearch(query, audioOnly, cookiesContent) {
 }
 
 function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
-  var card    = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("🔍 Search Results");
-
+  var card       = CardService.newCardBuilder();
+  var navSection = CardService.newCardSection();
   var homeBtnTop = CardService.newTextButton()
     .setText("🏠 Home")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  section.addWidget(homeBtnTop);
+  navSection.addWidget(homeBtnTop);
+  card.addSection(navSection);
+
+  var section = CardService.newCardSection().setHeader("🔍 Search Results");
 
   for (var i = 0; i < results.length; i++) {
     var r = results[i];
