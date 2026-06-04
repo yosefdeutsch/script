@@ -126,14 +126,15 @@ function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
 
 // ── Status card ────────────────────────────────────────────────────────────
 function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
-  var card          = CardService.newCardBuilder();
-  var statusSection = CardService.newCardSection().setHeader("📊 Status");
-
-  // Home button at top
-  var homeBtn = CardService.newTextButton()
+  var card        = CardService.newCardBuilder();
+  var navSection  = CardService.newCardSection();
+  var homeBtn     = CardService.newTextButton()
     .setText("🏠 Home")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  statusSection.addWidget(homeBtn);
+  navSection.addWidget(homeBtn);
+  card.addSection(navSection);
+
+  var statusSection = CardService.newCardSection().setHeader("📊 Status");
 
   var statusText    = CardService.newTextParagraph().setText(msg || "Working…");
   statusSection.addWidget(statusText);
@@ -730,10 +731,10 @@ function buildHistoryCard() {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("🕐 Download History");
 
-  var backBtnTop = CardService.newTextButton()
-    .setText("← Back")
+  var homeBtnTop = CardService.newTextButton()
+    .setText("🏠 Home")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  section.addWidget(backBtnTop);
+  section.addWidget(homeBtnTop);
   var history = getHistory();
 
   if (history.length === 0) {
@@ -818,10 +819,10 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
   var card    = CardService.newCardBuilder();
   var section = CardService.newCardSection().setHeader("🔍 Search Results");
 
-  var backBtnTop = CardService.newTextButton()
-    .setText("← Back")
+  var homeBtnTop = CardService.newTextButton()
+    .setText("🏠 Home")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  section.addWidget(backBtnTop);
+  section.addWidget(homeBtnTop);
 
   for (var i = 0; i < results.length; i++) {
     var r = results[i];
