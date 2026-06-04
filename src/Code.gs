@@ -1091,3 +1091,12 @@ function debugRSS() {
   });
   Logger.log(response.getContentText());
 }
+function checkLastStatus() {
+  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
+  var response = UrlFetchApp.fetch(
+    RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
+    { muteHttpExceptions: true }
+  );
+  Logger.log("Code: " + response.getResponseCode());
+  Logger.log("Body: " + response.getContentText().substring(0, 500));
+}
