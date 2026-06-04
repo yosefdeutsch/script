@@ -1054,3 +1054,12 @@ function debugChannel() {
   });
   Logger.log(response.getContentText());
 }
+function debugRSS() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_rss", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ secret: API_SECRET }),
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
