@@ -1140,3 +1140,13 @@ function diagnose() {
   Logger.log("Part_ready code: " + r2.getResponseCode());
   Logger.log("Part_ready body: " + r2.getContentText().substring(0, 300));
 }
+function diagnoseDrive() {
+  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
+  Logger.log("Job ID: " + jobId);
+  
+  var r1 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
+  Logger.log("Status: " + r1.getContentText().substring(0, 300));
+  
+  var r2 = UrlFetchApp.fetch(RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
+  Logger.log("Part ready: " + r2.getContentText().substring(0, 300));
+}
