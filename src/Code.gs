@@ -455,10 +455,6 @@ function onCheckStatus(e) {
     if (info.job_status === "error") {
       var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
       var job       = JSON.parse(statusRes.getContentText());
-    // Job failed
-    if (info.job_status === "error") {
-      var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-      var job       = JSON.parse(statusRes.getContentText());
       var errMsg    = job.message || "";
       errMsg = "❌ " + errMsg;
       return CardService.newActionResponseBuilder()
