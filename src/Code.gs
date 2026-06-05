@@ -1212,3 +1212,12 @@ function checkFormatsDebug() {
   });
   Logger.log(response.getContentText());
 }
+function testProxy() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_proxy", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ secret: API_SECRET }),
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
