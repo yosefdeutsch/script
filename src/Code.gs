@@ -1221,3 +1221,9 @@ function testProxy() {
   });
   Logger.log(response.getContentText());
 }
+function testProxyDirect() {
+  var response = UrlFetchApp.fetch("http://httpbin.org/ip", {
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
