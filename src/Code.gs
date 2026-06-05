@@ -1196,3 +1196,19 @@ function diagnoseDrive() {
   var r2 = UrlFetchApp.fetch(RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
   Logger.log("Part ready: " + r2.getContentText().substring(0, 300));
 }
+function checkFormatsDebug() {
+  var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
+  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
+  
+  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret:          API_SECRET,
+      url:             "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+      cookies_content: cookiesContent
+    }),
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
