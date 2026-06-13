@@ -308,7 +308,7 @@ function onGetFormats(e) {
     var body = JSON.parse(response.getContentText());
     var stdout = body.stdout || "";
 
-    if (!stdout || body.stderr) {
+    if (!stdout) {
       var errText = body.stderr || "Unknown error";
       var msg;
       if (errText.indexOf("Sign in") !== -1 || errText.indexOf("bot") !== -1 || errText.indexOf("rotated") !== -1 || errText.indexOf("cookies") !== -1) {
