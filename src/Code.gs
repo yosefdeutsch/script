@@ -460,6 +460,57 @@ function onCheckStatus(e) {
   PropertiesService.getUserProperties().setProperty("active_part_index", String(partIndex));
 
   try {
+    // NEW: Check if job is done with direct Drive upload (no size limit)
+    var quickStatusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+    var quickStatus;
+    try { quickStatus = JSON.parse(quickStatusRes.getContentText()); } catch(eq) { quickStatus = {}; }
+
+    if (quickStatus.status === "done" && quickStatus.drive_links && quickStatus.drive_links.length > 0) {
+      var qLinks = quickStatus.drive_links;
+      var qCustomName = quickStatus.custom_name || "";
+      var qMsg, qOpenUrl, qHistoryName;
+
+      if (qLinks.length === 1) {
+        qMsg = "✅ Saved to Drive!\n\n📁 " + qLinks[0].name;
+        qOpenUrl = qLinks[0].link;
+        qHistoryName = qCustomName || qLinks[0].name;
+      } else {
+        qMsg = "✅ Saved to Drive!\n\n📂 " + qLinks.length + " parts saved";
+        if (qCustomName) {
+          qMsg += "\n📂 Folder: " + qCustomName.replace(/\.(mp4|mp3)$/i, "");
+        }
+        qMsg += "\n\n🎉 Play them in order.";
+        qOpenUrl = qLinks[0].folder_link || qLinks[0].link;
+        qHistoryName = qCustomName || qLinks[0].name;
+      }
+
+      addToHistory(qHistoryName, qLinks.length, [qOpenUrl]);
+      PropertiesService.getUserProperties().deleteProperty("active_job_id");
+
+      var qCard    = CardService.newCardBuilder();
+      var qSection = CardService.newCardSection().setHeader("📊 Status");
+      qSection.addWidget(CardService.newTextParagraph().setText(qMsg));
+      qSection.addWidget(
+        CardService.newTextButton()
+          .setText("📂 Open in Drive")
+          .setOpenLink(CardService.newOpenLink().setUrl(qOpenUrl))
+      );
+      qSection.addWidget(
+        CardService.newTextButton()
+          .setText("⬇️ Download Another Video")
+          .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"))
+      );
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(qCard.addSection(qSection).build()))
+        .build();
+    }
+
+    if (quickStatus.status === "running" && quickStatus.message && quickStatus.message.indexOf("Uploading to Drive") !== -1) {
+      return CardService.newActionResponseBuilder()
+        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ " + quickStatus.message + "\n\nClick 'Check Status' again in ~10 seconds.", jobId)))
+        .build();
+    }
+
     // Check if this specific part is ready
     var partRes = UrlFetchApp.fetch(
       RENDER_URL + "/part_ready/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
