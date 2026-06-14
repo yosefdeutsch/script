@@ -834,7 +834,7 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
     // Thumbnail
     try {
       var img = CardService.newImage()
-        .setImageUrl(r.thumbnail)
+        .setImageUrl("https://deutsch.great-site.net/wp-content/uploads/2026/06/Logo-Page.png")
         .setAltText(r.title);
       section.addWidget(img);
     } catch(e) {}
