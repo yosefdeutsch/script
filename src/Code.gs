@@ -1243,3 +1243,16 @@ function checkFormatsDebug() {
   });
   Logger.log(response.getContentText());
 }
+function testOracleSearch() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret: API_SECRET,
+      query: "bach piano",
+      page: 0
+    }),
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText().substring(0, 500));
+}
