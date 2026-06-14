@@ -1293,3 +1293,19 @@ function testThumbnail() {
   Logger.log("Image fetch code: " + imgResponse.getResponseCode());
   Logger.log("Content-Type: " + imgResponse.getHeaders()["Content-Type"]);
 }
+function testChannelThumbs() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret: API_SECRET,
+      query: "Sruly Green",
+      page: 0
+    }),
+    muteHttpExceptions: true
+  });
+  var body = JSON.parse(response.getContentText());
+  for (var i = 0; i < body.results.length; i++) {
+    Logger.log(i + ": [" + body.results[i].thumbnail + "]");
+  }
+}
