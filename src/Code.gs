@@ -244,7 +244,7 @@ function onGetFormats(e) {
           if (fileSizeMB > 400) {
             return CardService.newActionResponseBuilder()
               .setNotification(CardService.newNotification().setText(
-                "⚠️ File is " + Math.round(fileSizeMB) + "MB — too large for the free server (max 400MB). The server only has 512MB RAM and will crash. Try a smaller file or upgrade Render to a paid plan."
+                "⚠️ File is " + Math.round(fileSizeMB) + "MB — too large for the server (max 800MB)."
               ))
               .build();
           }
@@ -252,7 +252,7 @@ function onGetFormats(e) {
           // Can't check size — warn user but allow download
           return CardService.newActionResponseBuilder()
             .setNotification(CardService.newNotification().setText(
-              "⚠️ Could not check file size. Only download if the file is under 400MB or the server may crash."
+              "⚠️ Could not check file size. Only download if the file is under 800MB."
             ))
             .build();
         }
@@ -352,7 +352,7 @@ function onGetFormats(e) {
       var sizeNum  = parseFloat(sizeMatch[1]);
       var sizeUnit = sizeMatch[2];
       var sizeMB   = sizeUnit === "GiB" ? sizeNum * 1024 : sizeNum;
-      if (sizeMB > 400) continue;
+      if (sizeMB > 800) continue;
 
       var label = id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2];
       formats.push({ id: id, label: label });
@@ -362,7 +362,7 @@ function onGetFormats(e) {
     if (audioOnly) {
       formats.unshift({ id: "bestaudio", label: "🏆 Best audio (auto)" });
     } else {
-      formats.unshift({ id: "best", label: "🏆 Best available — auto (≤400MB only)" });
+      formats.unshift({ id: "best", label: "🏆 Best available — auto (≤800MB only)" });
     }
 
     if (formats.length <= 1) {
@@ -1042,10 +1042,10 @@ function onDownloadSearchResult(e) {
       var sizeMatch = line.match(/\|\s*[~≈]?([\d.]+)(MiB|GiB)\s/);
       if (!sizeMatch) continue;
       var sizeMB = sizeMatch[2] === "GiB" ? parseFloat(sizeMatch[1]) * 1024 : parseFloat(sizeMatch[1]);
-      if (sizeMB > 400) continue;
+      if (sizeMB > 800) continue;
       formats.push({ id: id, label: id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2] });
     }
-    formats.unshift({ id: "best", label: "🏆 Best available — auto (≤400MB only)" });
+    formats.unshift({ id: "best", label: "🏆 Best available — auto (≤800MB only)" });
 
     if (formats.length <= 1) {
       return CardService.newActionResponseBuilder()
