@@ -1256,3 +1256,20 @@ function testOracleSearch() {
   });
   Logger.log(response.getContentText().substring(0, 500));
 }
+function checkThumbUrl() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret: API_SECRET,
+      query: "bach piano",
+      page: 0
+    }),
+    muteHttpExceptions: true
+  });
+  var body = JSON.parse(response.getContentText());
+  var thumb = body.results[0].thumbnail;
+  Logger.log("Thumbnail: [" + thumb + "]");
+  Logger.log("Length: " + thumb.length);
+  Logger.log("Type: " + typeof thumb);
+}
