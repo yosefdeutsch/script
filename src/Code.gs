@@ -832,6 +832,7 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
     var r = results[i];
 
     // Thumbnail
+    section.addWidget(CardService.newTextParagraph().setText("Thumbnail URL: " + r.thumbnail));
     try {
       var img = CardService.newImage()
         .setImageUrl(r.thumbnail)
