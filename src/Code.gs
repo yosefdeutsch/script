@@ -234,8 +234,10 @@ function onGetFormats(e) {
 
   if (audioOnly && isYouTube || url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1 || url.indexOf("drive.google.com") !== -1) {
 
-    // For Google Drive links, check file size first
-    if (url.indexOf("drive.google.com") !== -1) {
+    var isDriveFolder = url.indexOf("drive.google.com/drive/folders/") !== -1;
+
+    // For Google Drive links (not folders), check file size first
+    if (url.indexOf("drive.google.com") !== -1 && !isDriveFolder) {
       var fileIdMatch = url.match(/[-\w]{25,}/);
       if (fileIdMatch) {
         try {
@@ -259,8 +261,8 @@ function onGetFormats(e) {
       }
     }
 
-    // For Drive files, get real filename if no custom name provided
-    if (!customName && url.indexOf("drive.google.com") !== -1) {
+    // For Drive files (not folders), get real filename if no custom name provided
+    if (!customName && url.indexOf("drive.google.com") !== -1 && !isDriveFolder) {
       try {
         var fileIdMatch2 = url.match(/[-\w]{25,}/);
         if (fileIdMatch2) {
