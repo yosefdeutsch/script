@@ -837,7 +837,9 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
         .setImageUrl(r.thumbnail)
         .setAltText(r.title);
       section.addWidget(img);
-    } catch(e) {}
+    } catch(e) {
+      section.addWidget(CardService.newTextParagraph().setText("Image error: " + e.message));
+    }
 
     // Title + info
     var info = "🎬 " + r.title + "\n" +
