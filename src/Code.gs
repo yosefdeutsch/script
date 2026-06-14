@@ -1273,3 +1273,23 @@ function checkThumbUrl() {
   Logger.log("Length: " + thumb.length);
   Logger.log("Type: " + typeof thumb);
 }
+function testThumbnail() {
+  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret: API_SECRET,
+      query: "bach piano",
+      page: 0
+    }),
+    muteHttpExceptions: true
+  });
+  var body = JSON.parse(response.getContentText());
+  var thumbUrl = body.results[0].thumbnail;
+  Logger.log("Thumbnail URL: " + thumbUrl);
+  
+  // Try fetching the image directly
+  var imgResponse = UrlFetchApp.fetch(thumbUrl, {muteHttpExceptions: true});
+  Logger.log("Image fetch code: " + imgResponse.getResponseCode());
+  Logger.log("Content-Type: " + imgResponse.getHeaders()["Content-Type"]);
+}
