@@ -833,8 +833,9 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
 
     // Thumbnail
     try {
+      var proxiedThumb = RENDER_URL + "/thumbnail?url=" + encodeURIComponent(r.thumbnail);
       var img = CardService.newImage()
-        .setImageUrl(r.thumbnail)
+        .setImageUrl(proxiedThumb)
         .setAltText(r.title);
       section.addWidget(img);
     } catch(e) {}
