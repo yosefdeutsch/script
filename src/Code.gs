@@ -836,7 +836,8 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
       var proxiedThumb = RENDER_URL + "/thumbnail?url=" + encodeURIComponent(r.thumbnail);
       var img = CardService.newImage()
         .setImageUrl(proxiedThumb)
-        .setAltText(r.title);
+        .setAltText(r.title)
+        .setImageStyle(CardService.ImageStyle.CROPPED);
       section.addWidget(img);
     } catch(e) {}
 
