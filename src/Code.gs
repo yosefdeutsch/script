@@ -1360,3 +1360,10 @@ function testChannelThumbs() {
     Logger.log(i + ": [" + body.results[i].thumbnail + "]");
   }
 }
+function getCurrentCookies() {
+  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
+  var file = DriveApp.getFileById(cookiesFileId);
+  var content = file.getBlob().getDataAsString();
+  Logger.log(content.substring(0, 200));
+  Logger.log("Length: " + content.length);
+}
