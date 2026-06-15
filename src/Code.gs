@@ -1420,3 +1420,21 @@ function debugTestFmt() {
   });
   Logger.log(response.getContentText());
 }
+function debugTestFmt2() {
+  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
+  var file = DriveApp.getFileById(cookiesFileId);
+  var cookiesContent = file.getBlob().getDataAsString();
+  
+  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      secret: API_SECRET,
+      url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
+      cookies_content: cookiesContent,
+      fmt: "bv*[filesize_approx<800M]+ba/b[filesize_approx<800M]/best"
+    }),
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
+}
