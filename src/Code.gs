@@ -141,7 +141,7 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
 
   if (jobId) {
     var checkBtn = CardService.newTextButton()
-      .setText("🔄 Check Status & Save to Drive")
+      .setText("🔄 Check Status")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
@@ -507,7 +507,7 @@ function onCheckStatus(e) {
         .build();
     }
 
-    if (quickStatus.status === "running" && quickStatus.message && quickStatus.message.indexOf("Uploading to Drive") !== -1) {
+    if (quickStatus.status === "running" && quickStatus.message) {
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ " + quickStatus.message + "\n\nClick 'Check Status' again in ~10 seconds.", jobId)))
         .build();
