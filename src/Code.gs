@@ -46,9 +46,6 @@ function buildMainCard(url, statusMsg) {
     .setText("🕐 Download History")
     .setOnClickAction(CardService.newAction().setFunctionName("onViewHistory"));
 
-  var statusSection = CardService.newCardSection().setHeader("📊 Status");
-  var statusText    = CardService.newTextParagraph().setText(statusMsg || "Paste a link and click Search.");
-
   section.addWidget(urlInput);
   section.addWidget(nameInput);
   section.addWidget(audioSwitch);
@@ -66,7 +63,6 @@ function buildMainCard(url, statusMsg) {
       );
     section.addWidget(resumeJobBtn);
   }
-  statusSection.addWidget(statusText);
 
   var imageSection = CardService.newCardSection();
   var image = CardService.newImage()
@@ -75,14 +71,20 @@ function buildMainCard(url, statusMsg) {
   imageSection.addWidget(image);
 
   card.addSection(section);
-  card.addSection(statusSection);
   card.addSection(imageSection);
   return card.build();
 }
 
 // ── Format picker card ─────────────────────────────────────────────────────
 function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
-  var card    = CardService.newCardBuilder();
+  var card       = CardService.newCardBuilder();
+  var navSection = CardService.newCardSection();
+  var homeBtnTop = CardService.newTextButton()
+    .setText("🏠 Home")
+    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+  navSection.addWidget(homeBtnTop);
+  card.addSection(navSection);
+
   var section = CardService.newCardSection().setHeader("📋 Choose Format");
 
   var formatSelect = CardService.newSelectionInput()
@@ -108,15 +110,10 @@ function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
         })
     );
 
-  var homeBtn = CardService.newTextButton()
-    .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-
   var backBtn = CardService.newTextButton()
     .setText("← Back")
     .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
 
-  section.addWidget(homeBtn);
   section.addWidget(formatSelect);
   section.addWidget(downloadBtn);
   section.addWidget(backBtn);
