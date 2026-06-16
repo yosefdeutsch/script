@@ -11,7 +11,7 @@
 //  - Archive instead of Trash option (per-job choice)
 //  - Mark as Unread when actioned (snooze feel)
 //  - Label thread as "scheduled-trash" so it's visible in sidebar
-//  - Pre-trash warning email 5 min before firing
+//  - Pre-trash warning email ~1 hour before firing
 //  - Daily digest email of what was trashed automatically
 //  - Homepage card: view ALL pending jobs across all threads
 //  - Reliable trigger matching via trigger handler name embedding
@@ -27,7 +27,7 @@
 var SETTINGS_DEFAULTS = {
   actionType:      'trash',   // 'trash' | 'archive'
   markUnread:      'true',    // mark as unread when actioned
-  warnBefore:      'true',    // send warning email 5 min before
+  warnBefore:      'true',    // send warning email ~1 hour before
   dailyDigest:     'true',    // daily summary of auto-trashed threads
   labelThreads:    'true',    // apply "scheduled-trash" label
 };
@@ -172,8 +172,6 @@ function buildAddOn(e) {
   var quickSection = CardService.newCardSection().setHeader('⚡ Quick Schedule');
 
   var quickOptions = [
-    { label: '15 minutes', minutes: 15 },
-    { label: '45 minutes', minutes: 45 },
     { label: '1 hour',     minutes: 60 },
     { label: '3 hours',    minutes: 180 },
     { label: '6 hours',    minutes: 360 },
@@ -473,7 +471,7 @@ function cancelScheduledTrash(e) {
 
 
 // ============================================================
-// POLLER — runs every 5 minutes, handles all jobs
+// POLLER — runs every hour, handles all jobs
 // This is the ONLY time-based trigger we create (besides daily digest).
 // No per-job triggers are ever created, so we never hit Google's 20-trigger limit.
 // ============================================================
@@ -490,14 +488,14 @@ function pollJobs() {
       var job     = JSON.parse(allProps[key]);
       var changed = false;
 
-      // --- Warning email: send 5 min before if not yet sent ---
+      // --- Warning email: send ~1 hour before if not yet sent ---
       if (settings.warnBefore === 'true' && !job.warnSent) {
-        var warnAt = job.targetMs - 5 * 60 * 1000;
+        var warnAt = job.targetMs - 60 * 60 * 1000;
         if (now >= warnAt && now < job.targetMs) {
           var actionWord = job.action === 'archive' ? 'archived' : 'moved to Trash';
           var warnBody =
             'Hi,\n\n' +
-            'This is a reminder that the following email will be ' + actionWord + ' in ~5 minutes:\n\n' +
+            'This is a reminder that the following email will be ' + actionWord + ' in ~1 hour:\n\n' +
             'Subject: ' + job.subject + '\n' +
             'Scheduled for: ' + formatDateTime(new Date(job.targetMs)) + '\n\n' +
             'To cancel, open the email in Gmail and use the Schedule to Trash add-on.\n\n' +
@@ -618,8 +616,8 @@ function buildSettingsCard(e) {
 
   toggleSection.addWidget(
     CardService.newDecoratedText()
-      .setText('Warning email 5 min before')
-      .setTopLabel('Sends you a heads-up so you can cancel')
+      .setText('Warning email ~1 hour before')
+      .setTopLabel('Heads-up ~1 hour before so you can cancel')
       .setSwitchControl(
         CardService.newSwitch()
           .setFieldName('warnBefore')
@@ -715,10 +713,10 @@ function setupDailyDigestTrigger() {
     }
   });
 
-  // Poller: runs every 5 minutes — the only trigger that executes jobs
+  // Poller: runs every hour — the only trigger that executes jobs
   ScriptApp.newTrigger('pollJobs')
     .timeBased()
-    .everyMinutes(5)
+    .everyHours(1)
     .create();
 
   // Daily digest: runs at 8 AM every day
@@ -730,7 +728,7 @@ function setupDailyDigestTrigger() {
 
   return CardService.newActionResponseBuilder()
     .setNotification(CardService.newNotification()
-      .setText('✅ Add-on activated! Jobs will fire within 5 min of their scheduled time.'))
+      .setText('✅ Add-on activated! Jobs will fire within 1 hour of their scheduled time.'))
     .build();
 }
 
