@@ -706,11 +706,10 @@ function saveToggleSetting(e) {
 
 function setupDailyDigestTrigger() {
   // Remove any existing poller and digest triggers first (idempotent setup)
+  // Delete ALL existing triggers — cleans up any leftover per-job triggers
+  // from previous versions, and prevents duplicate poller/digest triggers.
   ScriptApp.getProjectTriggers().forEach(function(t) {
-    var fn = t.getHandlerFunction();
-    if (fn === 'sendDailyDigest' || fn === 'pollJobs') {
-      ScriptApp.deleteTrigger(t);
-    }
+    ScriptApp.deleteTrigger(t);
   });
 
   // Poller: runs every hour — the only trigger that executes jobs
