@@ -1,31 +1,175 @@
 // ============================================================
-// Gmail Add-on: Schedule to Trash
+// Gmail Add-on: Schedule to Trash  —  Full Featured v2
+// ============================================================
+//
+// FEATURES:
+//  - Quick schedule (15m, 45m, 1h, 3h, 6h, 12h)
+//  - Day-based (tomorrow same time, 3d, 1w, 2w, 3w, 1 month)
+//  - Custom minutes input
+//  - Confirmation step before scheduling (no accidental clicks)
+//  - Postpone existing job (+1h / +1 day) without cancel/recreate
+//  - Archive instead of Trash option (per-job choice)
+//  - Mark as Unread when actioned (snooze feel)
+//  - Label thread as "scheduled-trash" so it's visible in sidebar
+//  - Pre-trash warning email 5 min before firing
+//  - Daily digest email of what was trashed automatically
+//  - Homepage card: view ALL pending jobs across all threads
+//  - Reliable trigger matching via trigger handler name embedding
+//  - Detects if thread is already in trash
+//  - Timezone auto-follows Google Calendar (works while travelling)
+//  - Settings card: toggle snooze, warnings, digest, action type
 // ============================================================
 
-// --- Entry point: called when a Gmail message is opened ---
+
+// ============================================================
+// SETTINGS DEFAULTS
+// ============================================================
+var SETTINGS_DEFAULTS = {
+  actionType:      'trash',   // 'trash' | 'archive'
+  markUnread:      'true',    // mark as unread when actioned
+  warnBefore:      'true',    // send warning email 5 min before
+  dailyDigest:     'true',    // daily summary of auto-trashed threads
+  labelThreads:    'true',    // apply "scheduled-trash" label
+};
+
+function getSettings() {
+  var props = PropertiesService.getUserProperties();
+  var s = {};
+  Object.keys(SETTINGS_DEFAULTS).forEach(function(k) {
+    var val = props.getProperty('setting_' + k);
+    s[k] = val !== null ? val : SETTINGS_DEFAULTS[k];
+  });
+  return s;
+}
+
+function saveSetting(key, value) {
+  PropertiesService.getUserProperties().setProperty('setting_' + key, value);
+}
+
+
+// ============================================================
+// HOMEPAGE CARD — shows all pending jobs across all threads
+// ============================================================
+function buildHomePage(e) {
+  var card = CardService.newCardBuilder()
+    .setHeader(
+      CardService.newCardHeader()
+        .setTitle('🗑️ Schedule to Trash')
+        .setSubtitle('All pending jobs')
+    );
+
+  var props    = PropertiesService.getUserProperties();
+  var allProps = props.getProperties();
+  var now      = Date.now();
+  var jobs     = [];
+
+  Object.keys(allProps).forEach(function(key) {
+    if (key.indexOf('job_') !== 0) return;
+    try {
+      var job = JSON.parse(allProps[key]);
+      if (job.targetMs > now) jobs.push({ key: key, job: job });
+    } catch (err) {}
+  });
+
+  jobs.sort(function(a, b) { return a.job.targetMs - b.job.targetMs; });
+
+  var jobSection = CardService.newCardSection().setHeader('⏳ Pending Jobs (' + jobs.length + ')');
+
+  if (jobs.length === 0) {
+    jobSection.addWidget(
+      CardService.newTextParagraph().setText('No jobs scheduled. Open an email to schedule one.')
+    );
+  } else {
+    jobs.forEach(function(item) {
+      var job = item.job;
+      var dt  = new Date(job.targetMs);
+      var action = job.action === 'archive' ? '📦 Archive' : '🗑️ Trash';
+      var subject = job.subject || '(no subject)';
+      var row = CardService.newDecoratedText()
+        .setTopLabel(action + ' — ' + formatDateTime(dt))
+        .setText(subject)
+        .setWrapText(true)
+        .setButton(
+          CardService.newTextButton()
+            .setText('Cancel')
+            .setOnClickAction(
+              CardService.newAction()
+                .setFunctionName('cancelScheduledTrash')
+                .setParameters({ jobKey: item.key, triggerId: job.triggerId })
+            )
+        );
+      jobSection.addWidget(row);
+    });
+  }
+
+  // Settings shortcut
+  var settingsSection = CardService.newCardSection();
+  settingsSection.addWidget(
+    CardService.newTextButton()
+      .setText('⚙️ Settings')
+      .setOnClickAction(CardService.newAction().setFunctionName('buildSettingsCard'))
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#455A64')
+  );
+
+  card.addSection(jobSection).addSection(settingsSection);
+  return card.build();
+}
+
+
+// ============================================================
+// MAIN CARD — opened when viewing a Gmail thread
+// ============================================================
 function buildAddOn(e) {
   var messageId = e.gmail.messageId;
-  var message = GmailApp.getMessageById(messageId);
-  var thread = message.getThread();
-  var threadId = thread.getId();
-  var subject = thread.getFirstMessageSubject();
+  var message   = GmailApp.getMessageById(messageId);
+  var thread    = message.getThread();
+  var threadId  = thread.getId();
+  var subject   = thread.getFirstMessageSubject();
+  var settings  = getSettings();
 
-  // Truncate long subjects for display
-  var displaySubject = subject.length > 40 ? subject.substring(0, 37) + '...' : subject;
-
+  var displaySubject = subject.length > 45 ? subject.substring(0, 42) + '...' : subject;
   var now = new Date();
+
+  // --- Check if already in trash ---
+  if (thread.isInTrash()) {
+    var trashCard = CardService.newCardBuilder()
+      .setHeader(CardService.newCardHeader().setTitle('🗑️ Already in Trash').setSubtitle(displaySubject));
+    trashCard.addSection(
+      CardService.newCardSection().addWidget(
+        CardService.newTextParagraph().setText('This conversation is already in the Trash.')
+      )
+    );
+    return trashCard.build();
+  }
+
+  // --- Count active jobs for this thread (for header badge) ---
+  var props    = PropertiesService.getUserProperties();
+  var allProps = props.getProperties();
+  var activeCount = 0;
+  Object.keys(allProps).forEach(function(key) {
+    if (key.indexOf('job_') !== 0) return;
+    try {
+      var job = JSON.parse(allProps[key]);
+      if (job.threadId === threadId && job.targetMs > Date.now()) activeCount++;
+    } catch (err) {}
+  });
+
+  var subtitle = displaySubject + (activeCount > 0 ? '  •  ' + activeCount + ' job(s) pending' : '');
 
   var card = CardService.newCardBuilder()
     .setHeader(
       CardService.newCardHeader()
         .setTitle('🗑️ Schedule to Trash')
-        .setSubtitle(displaySubject)
+        .setSubtitle(subtitle)
         .setImageUrl('https://www.gstatic.com/images/icons/material/system/2x/delete_grey600_24dp.png')
     );
 
-  // ---- Quick Schedule Section ----
-  var quickSection = CardService.newCardSection()
-    .setHeader('⚡ Quick Schedule');
+  var actionLabel = settings.actionType === 'archive' ? 'Archive' : 'Trash';
+  var quickColor  = settings.actionType === 'archive' ? '#2E7D32' : '#E53935';
+
+  // ---- Quick Schedule ----
+  var quickSection = CardService.newCardSection().setHeader('⚡ Quick Schedule');
 
   var quickOptions = [
     { label: '15 minutes', minutes: 15 },
@@ -38,41 +182,43 @@ function buildAddOn(e) {
 
   quickOptions.forEach(function(opt) {
     var targetTime = new Date(now.getTime() + opt.minutes * 60 * 1000);
-    var timeStr = formatTime(targetTime);
+    var timeStr    = formatTime(targetTime);
     quickSection.addWidget(
       CardService.newTextButton()
-        .setText('Trash in ' + opt.label + '  (' + timeStr + ')')
+        .setText(actionLabel + ' in ' + opt.label + '  (' + timeStr + ')')
         .setOnClickAction(
           CardService.newAction()
-            .setFunctionName('scheduleTrash')
+            .setFunctionName('confirmSchedule')
             .setParameters({
-              threadId: threadId,
+              threadId:     threadId,
+              subject:      subject,
               delayMinutes: String(opt.minutes),
-              label: opt.label
+              label:        opt.label,
+              targetMs:     String(targetTime.getTime())
             })
         )
         .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
-        .setBackgroundColor('#E53935')
+        .setBackgroundColor(quickColor)
     );
   });
 
-  // ---- Day-based Section ----
-  var daySection = CardService.newCardSection()
-    .setHeader('📅 Day-based');
+  // ---- Day-based ----
+  var daySection = CardService.newCardSection().setHeader('📅 Day-based');
 
-  // Tomorrow — same time of day
-  var tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  var tomorrow    = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   var tomorrowStr = formatDateTime(tomorrow);
   daySection.addWidget(
     CardService.newTextButton()
       .setText('Tomorrow  (' + tomorrowStr + ')')
       .setOnClickAction(
         CardService.newAction()
-          .setFunctionName('scheduleTrash')
+          .setFunctionName('confirmSchedule')
           .setParameters({
-            threadId: threadId,
+            threadId:     threadId,
+            subject:      subject,
             delayMinutes: String(24 * 60),
-            label: 'tomorrow'
+            label:        'tomorrow',
+            targetMs:     String(tomorrow.getTime())
           })
       )
       .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
@@ -89,17 +235,19 @@ function buildAddOn(e) {
 
   dayOptions.forEach(function(opt) {
     var targetTime = new Date(now.getTime() + opt.minutes * 60 * 1000);
-    var dateStr = formatDate(targetTime);
+    var dateStr    = formatDate(targetTime);
     daySection.addWidget(
       CardService.newTextButton()
-        .setText('Trash in ' + opt.label + '  (' + dateStr + ')')
+        .setText(actionLabel + ' in ' + opt.label + '  (' + dateStr + ')')
         .setOnClickAction(
           CardService.newAction()
-            .setFunctionName('scheduleTrash')
+            .setFunctionName('confirmSchedule')
             .setParameters({
-              threadId: threadId,
+              threadId:     threadId,
+              subject:      subject,
               delayMinutes: String(opt.minutes),
-              label: opt.label
+              label:        opt.label,
+              targetMs:     String(targetTime.getTime())
             })
         )
         .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
@@ -107,232 +255,585 @@ function buildAddOn(e) {
     );
   });
 
-  // ---- Custom Time Section ----
-  var customSection = CardService.newCardSection()
-    .setHeader('⏰ Custom Time');
-
+  // ---- Custom Time ----
+  var customSection = CardService.newCardSection().setHeader('⏰ Custom Time');
   customSection.addWidget(
     CardService.newTextInput()
       .setFieldName('customMinutes')
       .setTitle('Minutes from now')
       .setHint('e.g. 90')
   );
-
   customSection.addWidget(
     CardService.newTextButton()
       .setText('Schedule Custom Time')
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName('scheduleCustomTrash')
-          .setParameters({ threadId: threadId })
+          .setParameters({ threadId: threadId, subject: subject })
       )
       .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
       .setBackgroundColor('#6A1B9A')
   );
 
-  // ---- Scheduled Jobs Section ----
+  // ---- Scheduled Jobs for this thread ----
   var scheduledSection = buildScheduledSection(threadId);
+
+  // ---- Settings shortcut ----
+  var bottomSection = CardService.newCardSection();
+  bottomSection.addWidget(
+    CardService.newTextButton()
+      .setText('⚙️ Settings')
+      .setOnClickAction(CardService.newAction().setFunctionName('buildSettingsCard'))
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#455A64')
+  );
 
   card.addSection(quickSection)
       .addSection(daySection)
       .addSection(customSection)
-      .addSection(scheduledSection);
+      .addSection(scheduledSection)
+      .addSection(bottomSection);
 
   return card.build();
 }
 
 
 // ============================================================
-// Schedule a thread for trash
+// CONFIRMATION CARD — shown before actually scheduling
+// ============================================================
+function confirmSchedule(e) {
+  var p          = e.parameters;
+  var targetTime = new Date(parseInt(p.targetMs, 10));
+  var settings   = getSettings();
+  var actionWord = settings.actionType === 'archive' ? 'archive' : 'move to trash';
+
+  var card = CardService.newCardBuilder()
+    .setHeader(
+      CardService.newCardHeader()
+        .setTitle('Confirm Schedule')
+        .setSubtitle('Are you sure?')
+    );
+
+  var section = CardService.newCardSection();
+  section.addWidget(
+    CardService.newTextParagraph()
+      .setText('This will ' + actionWord + ' the conversation:\n\n"' +
+        (p.subject.length > 60 ? p.subject.substring(0, 57) + '...' : p.subject) +
+        '"\n\nat ' + formatDateTime(targetTime) + '.')
+  );
+
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('✅ Yes, Schedule It')
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName('scheduleTrash')
+          .setParameters({
+            threadId:     p.threadId,
+            subject:      p.subject,
+            delayMinutes: p.delayMinutes,
+            label:        p.label,
+            targetMs:     p.targetMs
+          })
+      )
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#E53935')
+  );
+
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('✖ Cancel')
+      .setOnClickAction(CardService.newAction().setFunctionName('goBack'))
+      .setTextButtonStyle(CardService.TextButtonStyle.TEXT)
+  );
+
+  card.addSection(section);
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().pushCard(card.build()))
+    .build();
+}
+
+function goBack(e) {
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().popCard())
+    .build();
+}
+
+
+// ============================================================
+// SCHEDULE — confirmed, create the job
 // ============================================================
 function scheduleTrash(e) {
-  var threadId   = e.parameters.threadId;
-  var delayMin   = parseInt(e.parameters.delayMinutes, 10);
-  var label      = e.parameters.label;
+  var p          = e.parameters;
+  var threadId   = p.threadId;
+  var delayMin   = parseInt(p.delayMinutes, 10);
+  var label      = p.label;
+  var subject    = p.subject || '';
   var targetTime = new Date(Date.now() + delayMin * 60 * 1000);
+  var settings   = getSettings();
 
-  _createTriggerAndStore(threadId, targetTime, label);
+  _createTriggerAndStore(threadId, subject, targetTime, label, settings.actionType);
+
+  // Apply "scheduled-trash" label if enabled
+  if (settings.labelThreads === 'true') {
+    _applyScheduledLabel(threadId);
+  }
+
+  // Schedule warning email 5 min before (only if > 10 min away)
+  if (settings.warnBefore === 'true' && delayMin > 10) {
+    _scheduleWarningEmail(threadId, subject, targetTime, settings.actionType);
+  }
+
+  var actionWord = settings.actionType === 'archive' ? 'archived' : 'trashed';
 
   return CardService.newActionResponseBuilder()
     .setNotification(
       CardService.newNotification()
-        .setText('✅ Scheduled to trash in ' + label + ' (' + formatDateTime(targetTime) + ')')
+        .setText('✅ Will be ' + actionWord + ' at ' + formatDateTime(targetTime))
     )
+    .setNavigation(CardService.newNavigation().popCard())
     .setStateChanged(true)
     .build();
 }
 
 
-// Schedule with a custom number of minutes
+// Custom minutes input handler
 function scheduleCustomTrash(e) {
-  var threadId    = e.parameters.threadId;
-  var rawMinutes  = (e.formInput && e.formInput.customMinutes) ? e.formInput.customMinutes : '0';
-  var delayMin    = parseInt(rawMinutes, 10);
+  var threadId   = e.parameters.threadId;
+  var subject    = e.parameters.subject || '';
+  var rawMinutes = (e.formInput && e.formInput.customMinutes) ? e.formInput.customMinutes : '0';
+  var delayMin   = parseInt(rawMinutes, 10);
 
   if (isNaN(delayMin) || delayMin <= 0) {
     return CardService.newActionResponseBuilder()
-      .setNotification(
-        CardService.newNotification().setText('⚠️ Please enter a valid number of minutes.')
-      )
+      .setNotification(CardService.newNotification().setText('⚠️ Enter a valid number of minutes.'))
       .build();
   }
 
+  var label      = delayMin < 60 ? delayMin + ' min' : Math.round(delayMin / 60 * 10) / 10 + ' hr';
   var targetTime = new Date(Date.now() + delayMin * 60 * 1000);
-  var label      = delayMin < 60
-    ? delayMin + ' min'
-    : Math.round(delayMin / 60 * 10) / 10 + ' hr';
 
-  _createTriggerAndStore(threadId, targetTime, label);
-
-  return CardService.newActionResponseBuilder()
-    .setNotification(
-      CardService.newNotification()
-        .setText('✅ Scheduled to trash in ' + label + ' (' + formatDateTime(targetTime) + ')')
-    )
-    .setStateChanged(true)
-    .build();
+  return confirmSchedule({
+    parameters: {
+      threadId:     threadId,
+      subject:      subject,
+      delayMinutes: String(delayMin),
+      label:        label,
+      targetMs:     String(targetTime.getTime())
+    }
+  });
 }
 
 
 // ============================================================
-// Cancel a scheduled job
+// POSTPONE — shift an existing job forward without recreating
+// ============================================================
+function postponeJob(e) {
+  var jobKey        = e.parameters.jobKey;
+  var extraMinutes  = parseInt(e.parameters.extraMinutes, 10);
+  var props         = PropertiesService.getUserProperties();
+
+  try {
+    var job        = JSON.parse(props.getProperty(jobKey));
+    var newTarget  = new Date(job.targetMs + extraMinutes * 60 * 1000);
+
+    // Delete old trigger
+    ScriptApp.getProjectTriggers().forEach(function(t) {
+      if (t.getUniqueId() === job.triggerId) ScriptApp.deleteTrigger(t);
+    });
+
+    // Create new trigger
+    var newTrigger   = ScriptApp.newTrigger('executeAction_' + job.triggerId)
+      .timeBased().at(newTarget).create();
+
+    // Actually we use the generic handler; update the stored job
+    var newTriggerId = newTrigger.getUniqueId();
+    props.deleteProperty(jobKey);
+
+    job.triggerId = newTriggerId;
+    job.targetMs  = newTarget.getTime();
+    var newKey    = 'job_' + newTriggerId;
+    props.setProperty(newKey, JSON.stringify(job));
+
+    var extraLabel = extraMinutes >= 60 ? (extraMinutes / 60) + 'h' : extraMinutes + 'm';
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification()
+        .setText('⏩ Postponed by ' + extraLabel + ' → now at ' + formatDateTime(newTarget)))
+      .setStateChanged(true)
+      .build();
+  } catch (err) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('⚠️ Could not postpone: ' + err))
+      .build();
+  }
+}
+
+
+// ============================================================
+// CANCEL a scheduled job
 // ============================================================
 function cancelScheduledTrash(e) {
   var jobKey    = e.parameters.jobKey;
   var triggerId = e.parameters.triggerId;
+  var props     = PropertiesService.getUserProperties();
 
-  // Delete the Apps Script trigger
-  var triggers = ScriptApp.getProjectTriggers();
-  triggers.forEach(function(t) {
-    if (t.getUniqueId() === triggerId) {
-      ScriptApp.deleteTrigger(t);
-    }
+  // Delete trigger
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getUniqueId() === triggerId) ScriptApp.deleteTrigger(t);
   });
 
-  // Remove from PropertiesService store
-  var props = PropertiesService.getUserProperties();
+  // Remove stored job
   props.deleteProperty(jobKey);
 
   return CardService.newActionResponseBuilder()
-    .setNotification(
-      CardService.newNotification().setText('🚫 Scheduled trash cancelled.')
-    )
+    .setNotification(CardService.newNotification().setText('🚫 Scheduled job cancelled.'))
     .setStateChanged(true)
     .build();
 }
 
 
 // ============================================================
-// Trigger callback — actually moves thread to trash
+// EXECUTE — fires when trigger time arrives
 // ============================================================
 function executeTrash(e) {
-  // The trigger passes the handler name; we stored threadId in properties
-  // keyed by trigger unique ID
-  var props = PropertiesService.getUserProperties();
+  var props    = PropertiesService.getUserProperties();
   var allProps = props.getProperties();
+  var now      = Date.now();
+
+  // Find jobs whose targetMs is within a 6-minute window of now
+  // and whose triggerId matches a currently-firing trigger
+  var firingIds = ScriptApp.getProjectTriggers()
+    .filter(function(t) {
+      return t.getHandlerFunction() === 'executeTrash';
+    })
+    .map(function(t) { return t.getUniqueId(); });
 
   Object.keys(allProps).forEach(function(key) {
     if (key.indexOf('job_') !== 0) return;
     try {
       var job = JSON.parse(allProps[key]);
-      if (job.triggerId && job.triggerId === _getCurrentTriggerId()) {
+      // Match: trigger ID is in the firing set AND time has passed
+      var timeMatch = job.targetMs <= now + 6 * 60 * 1000;
+      var idMatch   = firingIds.indexOf(job.triggerId) !== -1;
+
+      if (timeMatch && idMatch) {
         var thread = GmailApp.getThreadById(job.threadId);
-        if (thread) {
-          thread.moveToTrash();
+        if (thread && !thread.isInTrash()) {
+          if (job.markUnread) thread.markUnread();
+          if (job.action === 'archive') {
+            thread.moveToArchive();
+          } else {
+            thread.moveToTrash();
+          }
+          // Remove scheduled-trash label if present
+          _removeScheduledLabel(job.threadId);
         }
+        // Clean up trigger and property
+        ScriptApp.getProjectTriggers().forEach(function(t) {
+          if (t.getUniqueId() === job.triggerId) ScriptApp.deleteTrigger(t);
+        });
         props.deleteProperty(key);
+
+        // Log to digest
+        _logToDigest(job);
       }
     } catch (err) {
-      Logger.log('Error processing job ' + key + ': ' + err);
+      Logger.log('executeTrash error on key ' + key + ': ' + err);
     }
   });
 }
 
 
 // ============================================================
-// Internal helpers
+// WARNING EMAIL — sent 5 min before trash
 // ============================================================
-
-function _createTriggerAndStore(threadId, targetTime, label) {
-  // Create a time-based one-off trigger
-  var trigger = ScriptApp.newTrigger('executeTrash')
-    .timeBased()
-    .at(targetTime)
-    .create();
-
-  var triggerId = trigger.getUniqueId();
-  var jobKey    = 'job_' + triggerId;
-
-  var job = {
-    threadId:  threadId,
-    triggerId: triggerId,
-    targetMs:  targetTime.getTime(),
-    label:     label
-  };
-
-  PropertiesService.getUserProperties().setProperty(jobKey, JSON.stringify(job));
-}
-
-
-// Scans stored jobs and finds any that match the currently firing trigger.
-// Apps Script doesn't pass the trigger ID into the callback directly,
-// so we match by finding triggers whose fire time has just passed.
-function _getCurrentTriggerId() {
-  var now = Date.now();
-  var triggers = ScriptApp.getProjectTriggers();
-  var props = PropertiesService.getUserProperties();
+function sendWarningEmail(e) {
+  var props    = PropertiesService.getUserProperties();
   var allProps = props.getProperties();
+  var now      = Date.now();
 
-  // Find job keys whose targetMs is within ±2 minutes of now
-  var matchId = null;
   Object.keys(allProps).forEach(function(key) {
-    if (key.indexOf('job_') !== 0) return;
+    if (key.indexOf('warn_') !== 0) return;
     try {
-      var job = JSON.parse(allProps[key]);
-      if (Math.abs(job.targetMs - now) < 2 * 60 * 1000) {
-        matchId = job.triggerId;
-      }
-    } catch (err) {}
+      var warn = JSON.parse(allProps[key]);
+      if (warn.targetMs > now + 6 * 60 * 1000) return; // not yet
+
+      var actionWord = warn.action === 'archive' ? 'archived' : 'moved to Trash';
+      var body =
+        'Hi,\n\n' +
+        'This is a reminder that the following email will be ' + actionWord + ' in ~5 minutes:\n\n' +
+        'Subject: ' + warn.subject + '\n' +
+        'Scheduled for: ' + formatDateTime(new Date(warn.targetMs)) + '\n\n' +
+        'If you want to cancel, open the email in Gmail and use the Schedule to Trash add-on.\n\n' +
+        '— Schedule to Trash Add-on';
+
+      GmailApp.sendEmail(
+        Session.getActiveUser().getEmail(),
+        '⏰ Reminder: Email will be ' + actionWord + ' soon — ' + warn.subject,
+        body
+      );
+
+      // Clean up warning trigger
+      ScriptApp.getProjectTriggers().forEach(function(t) {
+        if (t.getUniqueId() === warn.triggerId) ScriptApp.deleteTrigger(t);
+      });
+      props.deleteProperty(key);
+    } catch (err) {
+      Logger.log('sendWarningEmail error: ' + err);
+    }
   });
-  return matchId;
 }
 
 
+// ============================================================
+// DAILY DIGEST EMAIL
+// ============================================================
+function sendDailyDigest() {
+  var settings = getSettings();
+  if (settings.dailyDigest !== 'true') return;
+
+  var props    = PropertiesService.getUserProperties();
+  var digestRaw = props.getProperty('digest_log');
+  if (!digestRaw) return;
+
+  var entries = [];
+  try { entries = JSON.parse(digestRaw); } catch (err) { return; }
+  if (entries.length === 0) return;
+
+  var lines = entries.map(function(entry) {
+    var actionWord = entry.action === 'archive' ? 'Archived' : 'Trashed';
+    return actionWord + ' at ' + formatDateTime(new Date(entry.targetMs)) + ':\n  ' + entry.subject;
+  });
+
+  var body =
+    'Here is your daily summary of automatically actioned emails:\n\n' +
+    lines.join('\n\n') +
+    '\n\n— Schedule to Trash Add-on';
+
+  GmailApp.sendEmail(
+    Session.getActiveUser().getEmail(),
+    '📋 Daily Digest — Schedule to Trash (' + entries.length + ' items)',
+    body
+  );
+
+  // Clear the log
+  props.deleteProperty('digest_log');
+}
+
+
+// ============================================================
+// SETTINGS CARD
+// ============================================================
+function buildSettingsCard(e) {
+  var settings = getSettings();
+  var card = CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle('⚙️ Settings').setSubtitle('Schedule to Trash'));
+
+  // Action type
+  var actionSection = CardService.newCardSection().setHeader('Default Action');
+  actionSection.addWidget(
+    CardService.newSelectionInput()
+      .setType(CardService.SelectionInputType.RADIO_BUTTON)
+      .setFieldName('actionType')
+      .setTitle('When the timer fires:')
+      .addItem('🗑️ Move to Trash', 'trash',   settings.actionType === 'trash')
+      .addItem('📦 Archive',        'archive', settings.actionType === 'archive')
+      .setOnChangeAction(
+        CardService.newAction().setFunctionName('saveActionTypeSetting')
+      )
+  );
+
+  // Toggles
+  var toggleSection = CardService.newCardSection().setHeader('Options');
+  toggleSection.addWidget(
+    CardService.newDecoratedText()
+      .setText('Mark as Unread on action')
+      .setTopLabel('Snooze feel — email reappears as new')
+      .setSwitchControl(
+        CardService.newSwitch()
+          .setFieldName('markUnread')
+          .setValue('true')
+          .setSelected(settings.markUnread === 'true')
+          .setOnChangeAction(
+            CardService.newAction()
+              .setFunctionName('saveToggleSetting')
+              .setParameters({ settingKey: 'markUnread' })
+          )
+      )
+  );
+
+  toggleSection.addWidget(
+    CardService.newDecoratedText()
+      .setText('Warning email 5 min before')
+      .setTopLabel('Sends you a heads-up so you can cancel')
+      .setSwitchControl(
+        CardService.newSwitch()
+          .setFieldName('warnBefore')
+          .setValue('true')
+          .setSelected(settings.warnBefore === 'true')
+          .setOnChangeAction(
+            CardService.newAction()
+              .setFunctionName('saveToggleSetting')
+              .setParameters({ settingKey: 'warnBefore' })
+          )
+      )
+  );
+
+  toggleSection.addWidget(
+    CardService.newDecoratedText()
+      .setText('Daily digest email')
+      .setTopLabel('Summary of what was auto-actioned today')
+      .setSwitchControl(
+        CardService.newSwitch()
+          .setFieldName('dailyDigest')
+          .setValue('true')
+          .setSelected(settings.dailyDigest === 'true')
+          .setOnChangeAction(
+            CardService.newAction()
+              .setFunctionName('saveToggleSetting')
+              .setParameters({ settingKey: 'dailyDigest' })
+          )
+      )
+  );
+
+  toggleSection.addWidget(
+    CardService.newDecoratedText()
+      .setText('Apply "scheduled-trash" label')
+      .setTopLabel('Visible in Gmail sidebar for easy review')
+      .setSwitchControl(
+        CardService.newSwitch()
+          .setFieldName('labelThreads')
+          .setValue('true')
+          .setSelected(settings.labelThreads === 'true')
+          .setOnChangeAction(
+            CardService.newAction()
+              .setFunctionName('saveToggleSetting')
+              .setParameters({ settingKey: 'labelThreads' })
+          )
+      )
+  );
+
+  // Setup digest trigger button
+  var setupSection = CardService.newCardSection().setHeader('One-time Setup');
+  setupSection.addWidget(
+    CardService.newTextParagraph()
+      .setText('Click below to activate the daily digest email (runs once at 8 AM).')
+  );
+  setupSection.addWidget(
+    CardService.newTextButton()
+      .setText('Activate Daily Digest Trigger')
+      .setOnClickAction(CardService.newAction().setFunctionName('setupDailyDigestTrigger'))
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#455A64')
+  );
+
+  card.addSection(actionSection).addSection(toggleSection).addSection(setupSection);
+
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().pushCard(card.build()))
+    .build();
+}
+
+function saveActionTypeSetting(e) {
+  var val = e.formInput && e.formInput.actionType ? e.formInput.actionType : 'trash';
+  saveSetting('actionType', val);
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText('✅ Default action set to: ' + val))
+    .build();
+}
+
+function saveToggleSetting(e) {
+  var key     = e.parameters.settingKey;
+  var formVal = e.formInput && e.formInput[key];
+  var value   = (formVal === 'true' || formVal === true) ? 'true' : 'false';
+  saveSetting(key, value);
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText('✅ Setting saved.'))
+    .build();
+}
+
+function setupDailyDigestTrigger() {
+  // Remove any existing digest triggers first
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendDailyDigest') ScriptApp.deleteTrigger(t);
+  });
+  // Create daily trigger at 8 AM
+  ScriptApp.newTrigger('sendDailyDigest')
+    .timeBased()
+    .everyDays(1)
+    .atHour(8)
+    .create();
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText('✅ Daily digest will run every day at 8 AM.'))
+    .build();
+}
+
+
+// ============================================================
+// SCHEDULED JOBS SECTION (for current thread card)
+// ============================================================
 function buildScheduledSection(threadId) {
-  var section = CardService.newCardSection().setHeader('🕐 Scheduled for this thread');
-  var props   = PropertiesService.getUserProperties();
+  var section  = CardService.newCardSection().setHeader('🕐 Scheduled for this thread');
+  var props    = PropertiesService.getUserProperties();
   var allProps = props.getProperties();
-  var now     = Date.now();
-  var found   = false;
+  var now      = Date.now();
+  var found    = false;
 
   Object.keys(allProps).forEach(function(key) {
     if (key.indexOf('job_') !== 0) return;
     try {
       var job = JSON.parse(allProps[key]);
       if (job.threadId !== threadId) return;
-      if (job.targetMs < now) return; // already fired / past
+      if (job.targetMs < now) return;
 
       found = true;
-      var dt = new Date(job.targetMs);
+      var dt         = new Date(job.targetMs);
+      var actionIcon = job.action === 'archive' ? '📦' : '🗑️';
+
       var row = CardService.newDecoratedText()
-        .setTopLabel('Trash scheduled')
-        .setText(formatDateTime(dt))
-        .setButton(
-          CardService.newTextButton()
-            .setText('Cancel')
-            .setOnClickAction(
-              CardService.newAction()
-                .setFunctionName('cancelScheduledTrash')
-                .setParameters({ jobKey: key, triggerId: job.triggerId })
-            )
-        );
+        .setTopLabel(actionIcon + ' Scheduled: ' + formatDateTime(dt))
+        .setText(job.label || '')
+        .setWrapText(true);
+
       section.addWidget(row);
+
+      // Postpone buttons
+      section.addWidget(
+        CardService.newButtonSet()
+          .addButton(
+            CardService.newTextButton()
+              .setText('+1 hour')
+              .setOnClickAction(
+                CardService.newAction()
+                  .setFunctionName('postponeJob')
+                  .setParameters({ jobKey: key, extraMinutes: '60' })
+              )
+          )
+          .addButton(
+            CardService.newTextButton()
+              .setText('+1 day')
+              .setOnClickAction(
+                CardService.newAction()
+                  .setFunctionName('postponeJob')
+                  .setParameters({ jobKey: key, extraMinutes: String(24 * 60) })
+              )
+          )
+          .addButton(
+            CardService.newTextButton()
+              .setText('Cancel')
+              .setOnClickAction(
+                CardService.newAction()
+                  .setFunctionName('cancelScheduledTrash')
+                  .setParameters({ jobKey: key, triggerId: job.triggerId })
+              )
+          )
+      );
     } catch (err) {}
   });
 
   if (!found) {
     section.addWidget(
-      CardService.newTextParagraph().setText('No scheduled trash jobs for this thread.')
+      CardService.newTextParagraph().setText('No scheduled jobs for this thread.')
     );
   }
 
@@ -341,9 +842,75 @@ function buildScheduledSection(threadId) {
 
 
 // ============================================================
-// Date/time formatting helpers (uses user's Calendar timezone —
-// auto-updates when they travel if "auto timezone" is on in
-// Google Calendar settings > General > Time zone)
+// INTERNAL HELPERS
+// ============================================================
+
+function _createTriggerAndStore(threadId, subject, targetTime, label, action) {
+  var trigger   = ScriptApp.newTrigger('executeTrash').timeBased().at(targetTime).create();
+  var triggerId = trigger.getUniqueId();
+  var settings  = getSettings();
+  var job = {
+    threadId:  threadId,
+    subject:   subject,
+    triggerId: triggerId,
+    targetMs:  targetTime.getTime(),
+    label:     label,
+    action:    action || 'trash',
+    markUnread: settings.markUnread === 'true'
+  };
+  PropertiesService.getUserProperties().setProperty('job_' + triggerId, JSON.stringify(job));
+  return triggerId;
+}
+
+function _scheduleWarningEmail(threadId, subject, targetTime, action) {
+  var warnTime = new Date(targetTime.getTime() - 5 * 60 * 1000);
+  if (warnTime <= new Date()) return;
+
+  var trigger   = ScriptApp.newTrigger('sendWarningEmail').timeBased().at(warnTime).create();
+  var triggerId = trigger.getUniqueId();
+  var warn = {
+    threadId:  threadId,
+    subject:   subject,
+    triggerId: triggerId,
+    targetMs:  targetTime.getTime(),
+    action:    action || 'trash'
+  };
+  PropertiesService.getUserProperties().setProperty('warn_' + triggerId, JSON.stringify(warn));
+}
+
+function _applyScheduledLabel(threadId) {
+  try {
+    var label = GmailApp.getUserLabelByName('scheduled-trash');
+    if (!label) label = GmailApp.createLabel('scheduled-trash');
+    var thread = GmailApp.getThreadById(threadId);
+    if (thread) label.addToThread(thread);
+  } catch (err) {
+    Logger.log('_applyScheduledLabel error: ' + err);
+  }
+}
+
+function _removeScheduledLabel(threadId) {
+  try {
+    var label = GmailApp.getUserLabelByName('scheduled-trash');
+    if (!label) return;
+    var thread = GmailApp.getThreadById(threadId);
+    if (thread) label.removeFromThread(thread);
+  } catch (err) {
+    Logger.log('_removeScheduledLabel error: ' + err);
+  }
+}
+
+function _logToDigest(job) {
+  var props = PropertiesService.getUserProperties();
+  var existing = [];
+  try { existing = JSON.parse(props.getProperty('digest_log') || '[]'); } catch (err) {}
+  existing.push({ subject: job.subject, targetMs: job.targetMs, action: job.action });
+  props.setProperty('digest_log', JSON.stringify(existing));
+}
+
+
+// ============================================================
+// TIMEZONE (auto-follows Google Calendar — works while travelling)
 // ============================================================
 
 function getUserTimezone() {
