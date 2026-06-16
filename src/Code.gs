@@ -95,7 +95,7 @@ function buildHomePage(e) {
             .setOnClickAction(
               CardService.newAction()
                 .setFunctionName('cancelScheduledTrash')
-                .setParameters({ jobKey: item.key, triggerId: job.triggerId })
+                .setParameters({ jobKey: item.key })
             )
         );
       jobSection.addWidget(row);
@@ -379,11 +379,6 @@ function scheduleTrash(e) {
     _applyScheduledLabel(threadId);
   }
 
-  // Schedule warning email 5 min before (only if > 10 min away)
-  if (settings.warnBefore === 'true' && delayMin > 10) {
-    _scheduleWarningEmail(threadId, subject, targetTime, settings.actionType);
-  }
-
   var actionWord = settings.actionType === 'archive' ? 'archived' : 'trashed';
 
   return CardService.newActionResponseBuilder()
@@ -426,34 +421,20 @@ function scheduleCustomTrash(e) {
 
 
 // ============================================================
-// POSTPONE — shift an existing job forward without recreating
+// POSTPONE — shift an existing job forward (just updates stored targetMs, no trigger changes)
 // ============================================================
 function postponeJob(e) {
-  var jobKey        = e.parameters.jobKey;
-  var extraMinutes  = parseInt(e.parameters.extraMinutes, 10);
-  var props         = PropertiesService.getUserProperties();
+  var jobKey       = e.parameters.jobKey;
+  var extraMinutes = parseInt(e.parameters.extraMinutes, 10);
+  var props        = PropertiesService.getUserProperties();
 
   try {
-    var job        = JSON.parse(props.getProperty(jobKey));
-    var newTarget  = new Date(job.targetMs + extraMinutes * 60 * 1000);
+    var job       = JSON.parse(props.getProperty(jobKey));
+    var newTarget = new Date(job.targetMs + extraMinutes * 60 * 1000);
 
-    // Delete old trigger
-    ScriptApp.getProjectTriggers().forEach(function(t) {
-      if (t.getUniqueId() === job.triggerId) ScriptApp.deleteTrigger(t);
-    });
-
-    // Create new trigger
-    var newTrigger   = ScriptApp.newTrigger('executeAction_' + job.triggerId)
-      .timeBased().at(newTarget).create();
-
-    // Actually we use the generic handler; update the stored job
-    var newTriggerId = newTrigger.getUniqueId();
-    props.deleteProperty(jobKey);
-
-    job.triggerId = newTriggerId;
-    job.targetMs  = newTarget.getTime();
-    var newKey    = 'job_' + newTriggerId;
-    props.setProperty(newKey, JSON.stringify(job));
+    job.targetMs = newTarget.getTime();
+    job.warnSent = false; // reset so warning fires again at new time
+    props.setProperty(jobKey, JSON.stringify(job));
 
     var extraLabel = extraMinutes >= 60 ? (extraMinutes / 60) + 'h' : extraMinutes + 'm';
     return CardService.newActionResponseBuilder()
@@ -473,16 +454,15 @@ function postponeJob(e) {
 // CANCEL a scheduled job
 // ============================================================
 function cancelScheduledTrash(e) {
-  var jobKey    = e.parameters.jobKey;
-  var triggerId = e.parameters.triggerId;
-  var props     = PropertiesService.getUserProperties();
+  var jobKey = e.parameters.jobKey;
+  var props  = PropertiesService.getUserProperties();
 
-  // Delete trigger
-  ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (t.getUniqueId() === triggerId) ScriptApp.deleteTrigger(t);
-  });
+  // Read job to remove label before deleting
+  try {
+    var job = JSON.parse(props.getProperty(jobKey));
+    if (job && job.threadId) _removeScheduledLabel(job.threadId);
+  } catch (err) {}
 
-  // Remove stored job
   props.deleteProperty(jobKey);
 
   return CardService.newActionResponseBuilder()
@@ -493,30 +473,47 @@ function cancelScheduledTrash(e) {
 
 
 // ============================================================
-// EXECUTE — fires when trigger time arrives
+// POLLER — runs every 5 minutes, handles all jobs
+// This is the ONLY time-based trigger we create (besides daily digest).
+// No per-job triggers are ever created, so we never hit Google's 20-trigger limit.
 // ============================================================
-function executeTrash(e) {
+function pollJobs() {
   var props    = PropertiesService.getUserProperties();
   var allProps = props.getProperties();
+  var settings = getSettings();
   var now      = Date.now();
-
-  // Find jobs whose targetMs is within a 6-minute window of now
-  // and whose triggerId matches a currently-firing trigger
-  var firingIds = ScriptApp.getProjectTriggers()
-    .filter(function(t) {
-      return t.getHandlerFunction() === 'executeTrash';
-    })
-    .map(function(t) { return t.getUniqueId(); });
+  var userEmail = Session.getActiveUser().getEmail();
 
   Object.keys(allProps).forEach(function(key) {
     if (key.indexOf('job_') !== 0) return;
     try {
-      var job = JSON.parse(allProps[key]);
-      // Match: trigger ID is in the firing set AND time has passed
-      var timeMatch = job.targetMs <= now + 6 * 60 * 1000;
-      var idMatch   = firingIds.indexOf(job.triggerId) !== -1;
+      var job     = JSON.parse(allProps[key]);
+      var changed = false;
 
-      if (timeMatch && idMatch) {
+      // --- Warning email: send 5 min before if not yet sent ---
+      if (settings.warnBefore === 'true' && !job.warnSent) {
+        var warnAt = job.targetMs - 5 * 60 * 1000;
+        if (now >= warnAt && now < job.targetMs) {
+          var actionWord = job.action === 'archive' ? 'archived' : 'moved to Trash';
+          var warnBody =
+            'Hi,\n\n' +
+            'This is a reminder that the following email will be ' + actionWord + ' in ~5 minutes:\n\n' +
+            'Subject: ' + job.subject + '\n' +
+            'Scheduled for: ' + formatDateTime(new Date(job.targetMs)) + '\n\n' +
+            'To cancel, open the email in Gmail and use the Schedule to Trash add-on.\n\n' +
+            '— Schedule to Trash Add-on';
+          GmailApp.sendEmail(
+            userEmail,
+            '\u23F0 Reminder: Email will be ' + actionWord + ' soon \u2014 ' + job.subject,
+            warnBody
+          );
+          job.warnSent = true;
+          changed = true;
+        }
+      }
+
+      // --- Execute: time has arrived ---
+      if (now >= job.targetMs) {
         var thread = GmailApp.getThreadById(job.threadId);
         if (thread && !thread.isInTrash()) {
           if (job.markUnread) thread.markUnread();
@@ -525,61 +522,18 @@ function executeTrash(e) {
           } else {
             thread.moveToTrash();
           }
-          // Remove scheduled-trash label if present
           _removeScheduledLabel(job.threadId);
         }
-        // Clean up trigger and property
-        ScriptApp.getProjectTriggers().forEach(function(t) {
-          if (t.getUniqueId() === job.triggerId) ScriptApp.deleteTrigger(t);
-        });
-        props.deleteProperty(key);
-
-        // Log to digest
         _logToDigest(job);
+        props.deleteProperty(key);
+        return; // skip the save below
+      }
+
+      if (changed) {
+        props.setProperty(key, JSON.stringify(job));
       }
     } catch (err) {
-      Logger.log('executeTrash error on key ' + key + ': ' + err);
-    }
-  });
-}
-
-
-// ============================================================
-// WARNING EMAIL — sent 5 min before trash
-// ============================================================
-function sendWarningEmail(e) {
-  var props    = PropertiesService.getUserProperties();
-  var allProps = props.getProperties();
-  var now      = Date.now();
-
-  Object.keys(allProps).forEach(function(key) {
-    if (key.indexOf('warn_') !== 0) return;
-    try {
-      var warn = JSON.parse(allProps[key]);
-      if (warn.targetMs > now + 6 * 60 * 1000) return; // not yet
-
-      var actionWord = warn.action === 'archive' ? 'archived' : 'moved to Trash';
-      var body =
-        'Hi,\n\n' +
-        'This is a reminder that the following email will be ' + actionWord + ' in ~5 minutes:\n\n' +
-        'Subject: ' + warn.subject + '\n' +
-        'Scheduled for: ' + formatDateTime(new Date(warn.targetMs)) + '\n\n' +
-        'If you want to cancel, open the email in Gmail and use the Schedule to Trash add-on.\n\n' +
-        '— Schedule to Trash Add-on';
-
-      GmailApp.sendEmail(
-        Session.getActiveUser().getEmail(),
-        '⏰ Reminder: Email will be ' + actionWord + ' soon — ' + warn.subject,
-        body
-      );
-
-      // Clean up warning trigger
-      ScriptApp.getProjectTriggers().forEach(function(t) {
-        if (t.getUniqueId() === warn.triggerId) ScriptApp.deleteTrigger(t);
-      });
-      props.deleteProperty(key);
-    } catch (err) {
-      Logger.log('sendWarningEmail error: ' + err);
+      Logger.log('pollJobs error on key ' + key + ': ' + err);
     }
   });
 }
@@ -753,18 +707,30 @@ function saveToggleSetting(e) {
 }
 
 function setupDailyDigestTrigger() {
-  // Remove any existing digest triggers first
+  // Remove any existing poller and digest triggers first (idempotent setup)
   ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (t.getHandlerFunction() === 'sendDailyDigest') ScriptApp.deleteTrigger(t);
+    var fn = t.getHandlerFunction();
+    if (fn === 'sendDailyDigest' || fn === 'pollJobs') {
+      ScriptApp.deleteTrigger(t);
+    }
   });
-  // Create daily trigger at 8 AM
+
+  // Poller: runs every 5 minutes — the only trigger that executes jobs
+  ScriptApp.newTrigger('pollJobs')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+
+  // Daily digest: runs at 8 AM every day
   ScriptApp.newTrigger('sendDailyDigest')
     .timeBased()
     .everyDays(1)
     .atHour(8)
     .create();
+
   return CardService.newActionResponseBuilder()
-    .setNotification(CardService.newNotification().setText('✅ Daily digest will run every day at 8 AM.'))
+    .setNotification(CardService.newNotification()
+      .setText('✅ Add-on activated! Jobs will fire within 5 min of their scheduled time.'))
     .build();
 }
 
@@ -824,7 +790,7 @@ function buildScheduledSection(threadId) {
               .setOnClickAction(
                 CardService.newAction()
                   .setFunctionName('cancelScheduledTrash')
-                  .setParameters({ jobKey: key, triggerId: job.triggerId })
+                  .setParameters({ jobKey: key })
               )
           )
       );
@@ -846,37 +812,23 @@ function buildScheduledSection(threadId) {
 // ============================================================
 
 function _createTriggerAndStore(threadId, subject, targetTime, label, action) {
-  var trigger   = ScriptApp.newTrigger('executeTrash').timeBased().at(targetTime).create();
-  var triggerId = trigger.getUniqueId();
-  var settings  = getSettings();
+  // No per-job trigger created. The single pollJobs() trigger handles everything.
+  var jobId    = 'job_' + Utilities.getUuid();
+  var settings = getSettings();
   var job = {
-    threadId:  threadId,
-    subject:   subject,
-    triggerId: triggerId,
-    targetMs:  targetTime.getTime(),
-    label:     label,
-    action:    action || 'trash',
-    markUnread: settings.markUnread === 'true'
+    threadId:   threadId,
+    subject:    subject,
+    targetMs:   targetTime.getTime(),
+    label:      label,
+    action:     action || 'trash',
+    markUnread: settings.markUnread === 'true',
+    warnSent:   false
   };
-  PropertiesService.getUserProperties().setProperty('job_' + triggerId, JSON.stringify(job));
-  return triggerId;
+  PropertiesService.getUserProperties().setProperty(jobId, JSON.stringify(job));
+  return jobId;
 }
 
-function _scheduleWarningEmail(threadId, subject, targetTime, action) {
-  var warnTime = new Date(targetTime.getTime() - 5 * 60 * 1000);
-  if (warnTime <= new Date()) return;
-
-  var trigger   = ScriptApp.newTrigger('sendWarningEmail').timeBased().at(warnTime).create();
-  var triggerId = trigger.getUniqueId();
-  var warn = {
-    threadId:  threadId,
-    subject:   subject,
-    triggerId: triggerId,
-    targetMs:  targetTime.getTime(),
-    action:    action || 'trash'
-  };
-  PropertiesService.getUserProperties().setProperty('warn_' + triggerId, JSON.stringify(warn));
-}
+// _scheduleWarningEmail removed — handled by pollJobs()
 
 function _applyScheduledLabel(threadId) {
   try {
