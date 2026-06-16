@@ -341,17 +341,23 @@ function buildScheduledSection(threadId) {
 
 
 // ============================================================
-// Date/time formatting helpers (uses script timezone)
+// Date/time formatting helpers (uses user's Calendar timezone —
+// auto-updates when they travel if "auto timezone" is on in
+// Google Calendar settings > General > Time zone)
 // ============================================================
 
+function getUserTimezone() {
+  return CalendarApp.getDefaultCalendar().getTimeZone();
+}
+
 function formatTime(date) {
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'h:mm a');
+  return Utilities.formatDate(date, getUserTimezone(), 'h:mm a');
 }
 
 function formatDate(date) {
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'MMM d');
+  return Utilities.formatDate(date, getUserTimezone(), 'MMM d');
 }
 
 function formatDateTime(date) {
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'MMM d, h:mm a');
+  return Utilities.formatDate(date, getUserTimezone(), 'MMM d, h:mm a');
 }
