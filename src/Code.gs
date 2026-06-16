@@ -51,6 +51,7 @@ function saveSetting(key, value) {
 // HOMEPAGE CARD — shows all pending jobs across all threads
 // ============================================================
 function buildHomePage(e) {
+  pollJobs(); // process any due jobs on every card open
   var card = CardService.newCardBuilder()
     .setHeader(
       CardService.newCardHeader()
@@ -130,6 +131,9 @@ function buildAddOn(e) {
 
   var displaySubject = subject.length > 45 ? subject.substring(0, 42) + '...' : subject;
   var now = new Date();
+
+  // Process any due jobs every time a card is opened
+  pollJobs();
 
   // --- Check if already in trash ---
   if (thread.isInTrash()) {
@@ -476,10 +480,16 @@ function cancelScheduledTrash(e) {
 // No per-job triggers are ever created, so we never hit Google's 20-trigger limit.
 // ============================================================
 function pollJobs() {
-  var props    = PropertiesService.getUserProperties();
-  var allProps = props.getProperties();
-  var settings = getSettings();
-  var now      = Date.now();
+  // Runs on every card open — no triggers needed at all.
+  // Also cleans up any leftover triggers from old versions.
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    ScriptApp.deleteTrigger(t);
+  });
+
+  var props     = PropertiesService.getUserProperties();
+  var allProps  = props.getProperties();
+  var settings  = getSettings();
+  var now       = Date.now();
   var userEmail = Session.getActiveUser().getEmail();
 
   Object.keys(allProps).forEach(function(key) {
@@ -499,7 +509,7 @@ function pollJobs() {
             'Subject: ' + job.subject + '\n' +
             'Scheduled for: ' + formatDateTime(new Date(job.targetMs)) + '\n\n' +
             'To cancel, open the email in Gmail and use the Schedule to Trash add-on.\n\n' +
-            '— Schedule to Trash Add-on';
+            '\u2014 Schedule to Trash Add-on';
           GmailApp.sendEmail(
             userEmail,
             '\u23F0 Reminder: Email will be ' + actionWord + ' soon \u2014 ' + job.subject,
@@ -510,7 +520,7 @@ function pollJobs() {
         }
       }
 
-      // --- Execute: time has arrived ---
+      // --- Execute: scheduled time has passed ---
       if (now >= job.targetMs) {
         var thread = GmailApp.getThreadById(job.threadId);
         if (thread && !thread.isInTrash()) {
@@ -534,17 +544,24 @@ function pollJobs() {
       Logger.log('pollJobs error on key ' + key + ': ' + err);
     }
   });
+
+  // --- Daily digest: send if 24h have passed since last send ---
+  _maybeSendDailyDigest(props, settings, userEmail);
 }
 
 
 // ============================================================
-// DAILY DIGEST EMAIL
+// DAILY DIGEST — called from pollJobs(), no trigger needed.
+// Sends at most once per 24 hours, tracked via last_digest_ms property.
 // ============================================================
-function sendDailyDigest() {
-  var settings = getSettings();
+function _maybeSendDailyDigest(props, settings, userEmail) {
   if (settings.dailyDigest !== 'true') return;
 
-  var props    = PropertiesService.getUserProperties();
+  var now          = Date.now();
+  var lastSent     = parseInt(props.getProperty('last_digest_ms') || '0', 10);
+  var twentyFourH  = 24 * 60 * 60 * 1000;
+  if (now - lastSent < twentyFourH) return; // not yet 24h since last digest
+
   var digestRaw = props.getProperty('digest_log');
   if (!digestRaw) return;
 
@@ -560,16 +577,16 @@ function sendDailyDigest() {
   var body =
     'Here is your daily summary of automatically actioned emails:\n\n' +
     lines.join('\n\n') +
-    '\n\n— Schedule to Trash Add-on';
+    '\n\n\u2014 Schedule to Trash Add-on';
 
   GmailApp.sendEmail(
-    Session.getActiveUser().getEmail(),
-    '📋 Daily Digest — Schedule to Trash (' + entries.length + ' items)',
+    userEmail,
+    '\uD83D\uDCCB Daily Digest \u2014 Schedule to Trash (' + entries.length + ' items)',
     body
   );
 
-  // Clear the log
   props.deleteProperty('digest_log');
+  props.setProperty('last_digest_ms', String(now));
 }
 
 
@@ -665,21 +682,7 @@ function buildSettingsCard(e) {
       )
   );
 
-  // Setup digest trigger button
-  var setupSection = CardService.newCardSection().setHeader('One-time Setup');
-  setupSection.addWidget(
-    CardService.newTextParagraph()
-      .setText('Click below to activate the daily digest email (runs once at 8 AM).')
-  );
-  setupSection.addWidget(
-    CardService.newTextButton()
-      .setText('Activate Daily Digest Trigger')
-      .setOnClickAction(CardService.newAction().setFunctionName('setupDailyDigestTrigger'))
-      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
-      .setBackgroundColor('#455A64')
-  );
-
-  card.addSection(actionSection).addSection(toggleSection).addSection(setupSection);
+  card.addSection(actionSection).addSection(toggleSection);
 
   return CardService.newActionResponseBuilder()
     .setNavigation(CardService.newNavigation().pushCard(card.build()))
@@ -704,32 +707,7 @@ function saveToggleSetting(e) {
     .build();
 }
 
-function setupDailyDigestTrigger() {
-  // Remove any existing poller and digest triggers first (idempotent setup)
-  // Delete ALL existing triggers — cleans up any leftover per-job triggers
-  // from previous versions, and prevents duplicate poller/digest triggers.
-  ScriptApp.getProjectTriggers().forEach(function(t) {
-    ScriptApp.deleteTrigger(t);
-  });
 
-  // Poller: runs every hour — the only trigger that executes jobs
-  ScriptApp.newTrigger('pollJobs')
-    .timeBased()
-    .everyHours(1)
-    .create();
-
-  // Daily digest: runs at 8 AM every day
-  ScriptApp.newTrigger('sendDailyDigest')
-    .timeBased()
-    .everyDays(1)
-    .atHour(8)
-    .create();
-
-  return CardService.newActionResponseBuilder()
-    .setNotification(CardService.newNotification()
-      .setText('✅ Add-on activated! Jobs will fire within 1 hour of their scheduled time.'))
-    .build();
-}
 
 
 // ============================================================
