@@ -4,7 +4,8 @@
   "oauthScopes": [
     "https://www.googleapis.com/auth/gmail.addons.execute",
     "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/script.scriptapp"
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/spreadsheets"
   ],
   "addOns": {
     "common": {
@@ -13,6 +14,9 @@
       "layoutProperties": {
         "primaryColor": "#4285F4",
         "secondaryColor": "#EA4335"
+      },
+      "homepageTrigger": {
+        "runFunction": "onHomepageOpen"
       }
     },
     "gmail": {
