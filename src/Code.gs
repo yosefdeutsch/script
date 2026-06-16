@@ -1,1476 +1,326 @@
-// ── CONFIG ─────────────────────────────────────────────────────────────────
-const RENDER_URL   = "http://193.122.146.242:5000";
-const API_SECRET   = "mybotdownloader123";
-const DRIVE_FOLDER = "1uyvFqXejRjamnKFGKMGT1lhYqvDO9Acb";
-// ──────────────────────────────────────────────────────────────────────────
+const PROP_PREFIX = 'delmsg_';
+const REMINDER_PREFIX = 'reminder_';
+const LOG_SHEET_PROP = 'logSheetId';
 
-function buildAddOn(e) {
-  return buildMainCard("", "");
+// ===== CONTEXTUAL CARD (opens when reading an email) =====
+
+function onGmailMessageOpen(e) {
+  const messageId = e.gmail.messageId;
+  const accessToken = e.gmail.accessToken;
+  GmailApp.setCurrentMessageAccessToken(accessToken);
+
+  return buildMessageCard(messageId, e);
 }
 
-// ── Main card: URL input + Get Formats button ──────────────────────────────
-function buildMainCard(url, statusMsg) {
-  var card    = CardService.newCardBuilder();
-  var section = CardService.newCardSection().setHeader("🎬 Video Downloader");
+function buildMessageCard(messageId, e) {
+  const existing = getScheduledDeletion(messageId);
+  const card = CardService.newCardBuilder();
+  const section = CardService.newCardSection().setHeader('Self-Destruct Email');
 
-  var urlInput = CardService.newTextInput()
-    .setFieldName("video_url")
-    .setTitle("Paste link or search YouTube")
-    .setHint("Paste URL or search")
-    .setValue(url || "");
-
-  var cookiesInput = CardService.newTextInput()
-    .setFieldName("cookies_file_id")
-    .setTitle("Cookies file ID (optional)")
-    .setHint("Only needed to change cookies file")
-    .setValue("");
-
-  var nameInput = CardService.newTextInput()
-    .setFieldName("custom_name")
-    .setTitle("File name (optional)")
-    .setHint("Leave empty to use original title");
-
-  // Check if there's an active job
-  var activeJobId    = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var activePartIdx  = PropertiesService.getUserProperties().getProperty("active_part_index") || "0";
-  var audioSwitch = CardService.newSelectionInput()
-    .setType(CardService.SelectionInputType.CHECK_BOX)
-    .setFieldName("audio_only")
-    .addItem("🎵 Audio only (MP3)", "yes", false);
-
-  var getFormatsBtn = CardService.newTextButton()
-    .setText("🔍 Search")
-    .setOnClickAction(CardService.newAction().setFunctionName("onGetFormats"));
-
-  var historyBtn = CardService.newTextButton()
-    .setText("🕐 Download History")
-    .setOnClickAction(CardService.newAction().setFunctionName("onViewHistory"));
-
-  section.addWidget(urlInput);
-  section.addWidget(nameInput);
-  section.addWidget(audioSwitch);
-  section.addWidget(getFormatsBtn);
-  section.addWidget(historyBtn);
-
-  // Show resume button if there's an active job
-  if (activeJobId) {
-    var resumeJobBtn = CardService.newTextButton()
-      .setText("▶️ Resume Active Download (Part " + (parseInt(activePartIdx)+1) + ")")
-      .setOnClickAction(
-        CardService.newAction()
-          .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: activeJobId, part_index: activePartIdx })
-      );
-    section.addWidget(resumeJobBtn);
-  }
-
-  var imageSection = CardService.newCardSection();
-  var image = CardService.newImage()
-    .setImageUrl("https://deutsch.great-site.net/wp-content/uploads/2026/06/Logo-Page.png")
-    .setAltText("Video Downloader Bot");
-  imageSection.addWidget(image);
-
-  card.addSection(section);
-  card.addSection(imageSection);
-  return card.build();
-}
-
-// ── Format picker card ─────────────────────────────────────────────────────
-function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
-  var card       = CardService.newCardBuilder();
-  var navSection = CardService.newCardSection();
-  var homeBtnTop = CardService.newTextButton()
-    .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  navSection.addWidget(homeBtnTop);
-  card.addSection(navSection);
-
-  var section = CardService.newCardSection().setHeader("📋 Choose Format");
-
-  var formatSelect = CardService.newSelectionInput()
-    .setType(CardService.SelectionInputType.RADIO_BUTTON)
-    .setTitle("Available formats")
-    .setFieldName("format_id");
-
-  for (var i = 0; i < formats.length; i++) {
-    var f = formats[i];
-    formatSelect.addItem(f.label, f.id, i === 0);
-  }
-
-  var downloadBtn = CardService.newTextButton()
-    .setText(audioOnly ? "🎵 Download Audio (MP3)" : "⬇️ Download Selected Format")
-    .setOnClickAction(
-      CardService.newAction()
-        .setFunctionName("onDownloadFormat")
-        .setParameters({
-          url:             url,
-          cookies_file_id: cookiesFileId,
-          custom_name:     customName,
-          audio_only:      audioOnly ? "yes" : "no"
-        })
+  if (existing) {
+    const dueDate = new Date(existing.dueTime);
+    section.addWidget(
+      CardService.newDecoratedText()
+        .setText(`Deletes: <b>${formatDate(dueDate)}</b>`)
+        .setIcon(CardService.Icon.CLOCK)
+        .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.CLOCK).setIconColor(urgencyColor(dueDate)))
     );
+    section.addWidget(
+      CardService.newTextButton()
+        .setText('Cancel Deletion')
+        .setOnClickAction(CardService.newAction().setFunctionName('cancelDeletion').setParameters({messageId: messageId}))
+    );
+  } else {
+    section.addWidget(CardService.newTextParagraph().setText('Choose when to delete this conversation:'));
+    section.addWidget(buildOptionsGrid(messageId));
+    section.addWidget(
+      CardService.newTextButton()
+        .setText('Custom date & time…')
+        .setOnClickAction(CardService.newAction().setFunctionName('showCustomPicker').setParameters({messageId: messageId}))
+    );
+  }
 
-  var backBtn = CardService.newTextButton()
-    .setText("← Back")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-
-  section.addWidget(formatSelect);
-  section.addWidget(downloadBtn);
-  section.addWidget(backBtn);
   card.addSection(section);
   return card.build();
 }
 
-// ── Status card ────────────────────────────────────────────────────────────
-function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
-  var card        = CardService.newCardBuilder();
-  var navSection  = CardService.newCardSection();
-  var homeBtn     = CardService.newTextButton()
-    .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  navSection.addWidget(homeBtn);
-  card.addSection(navSection);
+function buildOptionsGrid(messageId) {
+  const options = [
+    {label: 'Delete Now', minutes: 0},
+    {label: '15 min', minutes: 15},
+    {label: '45 min', minutes: 45},
+    {label: '1 hour', minutes: 60},
+    {label: '3 hours', minutes: 180},
+    {label: '12 hours', minutes: 720},
+    {label: 'Tomorrow', minutes: 1440},
+    {label: '3 days', minutes: 4320},
+    {label: '1 week', minutes: 10080},
+    {label: '3 weeks', minutes: 30240}
+  ];
 
-  var statusSection = CardService.newCardSection().setHeader("📊 Status");
-
-  var statusText    = CardService.newTextParagraph().setText(msg || "Working…");
-  statusSection.addWidget(statusText);
-
-  if (jobId) {
-    var checkBtn = CardService.newTextButton()
-      .setText("🔄 Check Status")
-      .setOnClickAction(
-        CardService.newAction()
-          .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: jobId, part_index: "0" })
-      );
-    statusSection.addWidget(checkBtn);
-  }
-
-  if (resumeJobId !== undefined && resumeJobId !== null) {
-    var nextLabel = "▶️ Save Part " + (resumeFrom + 1);
-    var resumeBtn = CardService.newTextButton()
-      .setText(nextLabel)
-      .setOnClickAction(
-        CardService.newAction()
-          .setFunctionName("onCheckStatus")
-          .setParameters({ job_id: resumeJobId, part_index: String(resumeFrom) })
-      );
-    statusSection.addWidget(resumeBtn);
-  }
-
-  // Only show "Download Another Video" when fully done (no pending job or resume)
-  if (!jobId && !resumeJobId) {
-    var newBtn = CardService.newTextButton()
-      .setText("⬇️ Download Another Video")
-      .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-    statusSection.addWidget(newBtn);
-  }
-
-  card.addSection(statusSection);
-  return card.build();
-}
-
-// ── Get Formats button clicked ─────────────────────────────────────────────
-function onGetFormats(e) {
-  var url           = e.formInput.video_url.trim();
-  var cookiesFileId = e.formInput.cookies_file_id ? e.formInput.cookies_file_id.trim() : "";
-  var customName    = e.formInput.custom_name ? e.formInput.custom_name.trim() : "";
-  var audioOnly     = (e.formInput.audio_only && e.formInput.audio_only.indexOf("yes") !== -1);
-
-  if (!url) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("⚠️ Please paste a link or enter a search term."))
-      .build();
-  }
-
-  // Detect if input is a URL or search query
-  var isUrl = url.indexOf("http://") === 0 || url.indexOf("https://") === 0;
-  if (!isUrl) {
-    // Treat as YouTube search
-    return onYouTubeSearch(url, audioOnly, cookiesContent);
-  }
-
-  // Save cookies ID permanently if provided
-  if (cookiesFileId) {
-    PropertiesService.getUserProperties().setProperty("youtube_cookies_id", cookiesFileId);
-  } else {
-    cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
-  }
-
-  var cookiesContent = "";
-  if (cookiesFileId) {
-    try {
-      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-    } catch(err) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Could not read cookies file: " + err.message))
-        .build();
-    }
-  }
-
-  // YouTube audio, m3u8, direct video files, and Google Drive — skip format picker
-  var isYouTube = url.indexOf("youtube.com") !== -1 || url.indexOf("youtu.be") !== -1;
-
-  // For YouTube audio — verify cookies work before downloading
-  if (audioOnly && isYouTube) {
-    var checkRes = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
-      muteHttpExceptions: true
-    });
-    var checkBody  = JSON.parse(checkRes.getContentText());
-    var checkErr   = checkBody.stderr || "";
-    if (checkErr.indexOf("Sign in") !== -1 || checkErr.indexOf("bot") !== -1 || checkErr.indexOf("rotated") !== -1 || checkErr.indexOf("cookies") !== -1) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Press 'Get Formats' again."))
-        .build();
-    }
-  }
-
-  if (audioOnly && isYouTube || url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1 || url.indexOf(".mkv") !== -1 || url.indexOf("drive.google.com") !== -1) {
-
-    var isDriveFolder = url.indexOf("drive.google.com/drive/folders/") !== -1;
-
-    // For Google Drive links (not folders), check file size first
-    if (url.indexOf("drive.google.com") !== -1 && !isDriveFolder) {
-      var fileIdMatch = url.match(/[-\w]{25,}/);
-      if (fileIdMatch) {
-        try {
-          var driveFile = DriveApp.getFileById(fileIdMatch[0]);
-          var fileSizeMB = driveFile.getSize() / (1024 * 1024);
-          if (fileSizeMB > 400) {
-            return CardService.newActionResponseBuilder()
-              .setNotification(CardService.newNotification().setText(
-                "⚠️ File is " + Math.round(fileSizeMB) + "MB — too large for the server (max 800MB)."
-              ))
-              .build();
-          }
-        } catch(err) {
-          // Can't check size — warn user but allow download
-          return CardService.newActionResponseBuilder()
-            .setNotification(CardService.newNotification().setText(
-              "⚠️ Could not check file size. Only download if the file is under 800MB."
-            ))
-            .build();
-        }
-      }
-    }
-
-    // For Drive files (not folders), get real filename if no custom name provided
-    if (!customName && url.indexOf("drive.google.com") !== -1 && !isDriveFolder) {
-      try {
-        var fileIdMatch2 = url.match(/[-\w]{25,}/);
-        if (fileIdMatch2) {
-          var driveFile2 = DriveApp.getFileById(fileIdMatch2[0]);
-          customName = driveFile2.getName();
-        }
-      } catch(err) {}
-    }
-
-    var directPayload = {
-      url:             url,
-      secret:          API_SECRET,
-      cookies_content: cookiesContent,
-      format_id:       audioOnly ? "bestaudio" : "best",
-      custom_name:     customName,
-      folder_id:       DRIVE_FOLDER,
-      audio_only:      audioOnly
-    };
-    var directRes = UrlFetchApp.fetch(RENDER_URL + "/download", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify(directPayload),
-      muteHttpExceptions: true
-    });
-    var directBody = JSON.parse(directRes.getContentText());
-    if (directRes.getResponseCode() === 202) {
-      PropertiesService.getUserProperties().setProperty("active_job_id", directBody.job_id);
-      PropertiesService.getUserProperties().setProperty("active_part_index", "0");
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(
-          buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", directBody.job_id)
-        ))
-        .build();
-    }
-  }
-
-  try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
-      muteHttpExceptions: true
-    });
-
-    var body = JSON.parse(response.getContentText());
-    var stdout = body.stdout || "";
-
-    if (!stdout) {
-      var errText = body.stderr || "Unknown error";
-      var msg;
-      if (errText.indexOf("Sign in") !== -1 || errText.indexOf("bot") !== -1 || errText.indexOf("rotated") !== -1 || errText.indexOf("cookies") !== -1) {
-        msg = "❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Press 'Get Formats' again.";
-      } else {
-        msg = "❌ Could not get formats: " + errText.substring(0, 200);
-      }
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText(msg))
-        .build();
-    }
-
-    // Parse format lines
-    var formats = [];
-    var lines   = stdout.split("\n");
-    for (var i = 0; i < lines.length; i++) {
-      var line  = lines[i].trim();
-      var match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+/);
-      if (!match) continue;
-
-      var id         = match[1];
-      var ext        = match[2];
-      var resolution = match[3];
-      var isAudioOnly = line.indexOf("audio only") !== -1;
-
-      // For audio only mode, skip size check and just show audio formats
-      if (audioOnly) {
-        if (isAudioOnly) {
-          var sizeMatch = line.match(/\|\s*~?([\d.]+)(MiB|GiB)\s/);
-          var sizeLabel = sizeMatch ? sizeMatch[1] + sizeMatch[2] : "?MB";
-          formats.push({ id: id, label: "🎵 " + id + " | " + ext + " | " + sizeLabel });
-        }
-        continue;
-      }
-
-      // For video mode, require size and skip audio-only formats
-      if (isAudioOnly) continue;
-      var sizeMatch = line.match(/\|\s*[~≈]?([\d.]+)(MiB|GiB)\s/);
-      if (!sizeMatch) continue;
-
-      var sizeNum  = parseFloat(sizeMatch[1]);
-      var sizeUnit = sizeMatch[2];
-      var sizeMB   = sizeUnit === "GiB" ? sizeNum * 1024 : sizeNum;
-      if (sizeMB > 800) continue;
-
-      var label = id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2];
-      formats.push({ id: id, label: label });
-    }
-
-    // Add best option at top
-    if (audioOnly) {
-      formats.unshift({ id: "bestaudio", label: "🏆 Best audio (auto)" });
-    } else {
-      formats.unshift({ id: "best", label: "🏆 Best available — auto (≤800MB only)" });
-    }
-
-    if (formats.length <= 1) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ No formats found. Try adding cookies."))
-        .build();
-    }
-
-    var newCard = buildFormatCard(url, cookiesFileId, customName, formats, audioOnly);
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(newCard))
-      .build();
-
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
-      .build();
-  }
-}
-
-// ── Download Selected Format ───────────────────────────────────────────────
-function onDownloadFormat(e) {
-  var formatId      = e.formInput.format_id;
-  var url           = e.parameters.url;
-  var cookiesFileId = e.parameters.cookies_file_id || "";
-  var customName    = e.parameters.custom_name || "";
-
-  var audioOnly = e.parameters.audio_only === "yes";
-  // Save cookies ID permanently if provided
-  if (cookiesFileId) {
-    PropertiesService.getUserProperties().setProperty("youtube_cookies_id", cookiesFileId);
-  } else {
-    cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
-  }
-
-  var cookiesContent = "";
-  if (cookiesFileId) {
-    try {
-      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-    } catch(err) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Could not read cookies file: " + err.message))
-        .build();
-    }
-  }
-
-  try {
-    var payload = {
-      url:             url,
-      secret:          API_SECRET,
-      cookies_content: cookiesContent,
-      format_id:       formatId,
-      custom_name:     customName,
-      folder_id:       DRIVE_FOLDER,
-      audio_only:      audioOnly
-    };
-
-    var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify(payload),
-      muteHttpExceptions: true
-    });
-
-    var code = response.getResponseCode();
-    var body = JSON.parse(response.getContentText());
-
-    if (code === 202) {
-      PropertiesService.getUserProperties().setProperty("active_job_id", body.job_id);
-      PropertiesService.getUserProperties().setProperty("active_part_index", "0");
-      var newCard = buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", body.job_id);
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(newCard))
-        .build();
-    } else {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Error: " + (body.error || "Unknown")))
-        .build();
-    }
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Failed to reach server: " + err.message))
-      .build();
-  }
-}
-
-// ── Check Status & Save ────────────────────────────────────────────────────
-function onCheckStatus(e) {
-  var jobId     = e.parameters.job_id;
-  var partIndex = parseInt(e.parameters.part_index !== undefined ? e.parameters.part_index : "0");
-  if (isNaN(partIndex)) partIndex = 0;
-
-  // Save progress so resume works after addon refresh
-  PropertiesService.getUserProperties().setProperty("active_job_id", jobId);
-  PropertiesService.getUserProperties().setProperty("active_part_index", String(partIndex));
-
-  try {
-    // NEW: Check if job is done with direct Drive upload (no size limit)
-    var quickStatusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-    var quickStatus;
-    try { quickStatus = JSON.parse(quickStatusRes.getContentText()); } catch(eq) { quickStatus = {}; }
-
-    if (quickStatus.status === "done" && quickStatus.drive_links && quickStatus.drive_links.length > 0) {
-      var qLinks = quickStatus.drive_links;
-      var qCustomName = quickStatus.custom_name || "";
-      var qMsg, qOpenUrl, qHistoryName;
-
-      if (qLinks.length === 1) {
-        qMsg = "✅ Saved to Drive!\n\n📁 " + qLinks[0].name;
-        qOpenUrl = qLinks[0].link;
-        qHistoryName = qCustomName || qLinks[0].name;
-      } else {
-        qMsg = "✅ Saved to Drive!\n\n📂 " + qLinks.length + " parts saved";
-        if (qCustomName) {
-          qMsg += "\n📂 Folder: " + qCustomName.replace(/\.(mp4|mp3)$/i, "");
-        }
-        qMsg += "\n\n🎉 Play them in order.";
-        qOpenUrl = qLinks[0].folder_link || qLinks[0].link;
-        qHistoryName = qCustomName || qLinks[0].name;
-      }
-
-      addToHistory(qHistoryName, qLinks.length, [qOpenUrl]);
-      PropertiesService.getUserProperties().deleteProperty("active_job_id");
-
-      var qCard    = CardService.newCardBuilder();
-      var qSection = CardService.newCardSection().setHeader("📊 Status");
-      qSection.addWidget(CardService.newTextParagraph().setText(qMsg));
-      qSection.addWidget(
-        CardService.newTextButton()
-          .setText("📂 Open in Drive")
-          .setOpenLink(CardService.newOpenLink().setUrl(qOpenUrl))
-      );
-      qSection.addWidget(
-        CardService.newTextButton()
-          .setText("⬇️ Download Another Video")
-          .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"))
-      );
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(qCard.addSection(qSection).build()))
-        .build();
-    }
-
-    if (quickStatus.status === "running" && quickStatus.message) {
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ " + quickStatus.message + "\n\nClick 'Check Status' again in ~10 seconds.", jobId)))
-        .build();
-    }
-
-    // Check if this specific part is ready
-    var partRes = UrlFetchApp.fetch(
-      RENDER_URL + "/part_ready/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
-      { muteHttpExceptions: true }
+  const buttonSet = CardService.newButtonSet();
+  options.forEach(opt => {
+    buttonSet.addButton(
+      CardService.newTextButton()
+        .setText(opt.label)
+        .setOnClickAction(
+          CardService.newAction()
+            .setFunctionName('scheduleDeletion')
+            .setParameters({messageId: messageId, minutes: String(opt.minutes)})
+        )
     );
-    var info;
-    try {
-      info = JSON.parse(partRes.getContentText());
-    } catch(err) {
-      // HTML response means server error or cold start
-      if (partRes.getResponseCode() === 404) {
-        PropertiesService.getUserProperties().deleteProperty("active_job_id");
-        return CardService.newActionResponseBuilder()
-          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ Server restarted and job was lost.\n\nPlease download again.", null)))
-          .build();
-      }
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("⚠️ Server error. Try again in 30 seconds."))
-        .build();
-    }
+  });
+  return buttonSet;
+}
 
-    // Job not found — either still starting or server restarted
-    if (info.status === "not_found") {
-      // Check if job exists at all
-      var checkRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-      var checkJob;
-      try { checkJob = JSON.parse(checkRes.getContentText()); } catch(e) { checkJob = {}; }
-      
-      if (checkRes.getResponseCode() === 404 || checkJob.error) {
-        // Job truly lost — server restarted
-        PropertiesService.getUserProperties().deleteProperty("active_job_id");
-        return CardService.newActionResponseBuilder()
-          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("❌ Server restarted and job was lost.\n\nPlease download again.", null)))
-          .build();
-      } else {
-        // Job exists but part not ready yet
-        return CardService.newActionResponseBuilder()
-          .setNavigation(CardService.newNavigation().updateCard(buildStatusCard("⏳ Still downloading… not ready yet.\n\nClick 'Check Again' in ~30 seconds.", null, jobId, partIndex)))
-          .build();
-      }
-    }
+// ===== CUSTOM DATE/TIME PICKER =====
 
-    // Job failed
-    if (info.job_status === "error") {
-      var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-      var job       = JSON.parse(statusRes.getContentText());
-      var errMsg    = job.message || "";
-      errMsg = "❌ " + errMsg;
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(errMsg, null)))
-        .build();
-    }
+function showCustomPicker(e) {
+  const messageId = e.parameters.messageId;
+  const card = CardService.newCardBuilder();
+  const section = CardService.newCardSection().setHeader('Custom Delete Time');
 
-    // Part not ready yet
-    if (!info.ready) {
-      var stillMsg = "⏳ Still downloading… part " + (partIndex+1) + " not ready yet.\n\nClick 'Check Again' in ~30 seconds.";
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(buildStatusCard(stillMsg, null, jobId, partIndex)))
-        .build();
-    }
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('customMinutes')
+      .setTitle('Minutes from now')
+      .setHint('e.g. 90 for 1.5 hours')
+  );
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('Schedule')
+      .setOnClickAction(
+        CardService.newAction().setFunctionName('scheduleCustomDeletion').setParameters({messageId: messageId})
+      )
+  );
 
-    // Part is ready — fetch and save it NOW
-    var fileRes = UrlFetchApp.fetch(
-      RENDER_URL + "/part/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
-      { muteHttpExceptions: true }
+  card.addSection(section);
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().pushCard(card.build()))
+    .build();
+}
+
+function scheduleCustomDeletion(e) {
+  const minutes = parseInt(e.formInput.customMinutes, 10);
+  if (isNaN(minutes) || minutes < 0) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('Enter a valid number of minutes.'))
+      .build();
+  }
+  e.parameters.minutes = String(minutes);
+  return scheduleDeletion(e);
+}
+
+// ===== SCHEDULING LOGIC =====
+
+function scheduleDeletion(e) {
+  const messageId = e.parameters.messageId;
+  const minutes = parseInt(e.parameters.minutes, 10);
+  const accessToken = e.gmail.accessToken;
+  GmailApp.setCurrentMessageAccessToken(accessToken);
+
+  const dueTime = minutes === 0 ? new Date() : new Date(Date.now() + minutes * 60 * 1000);
+  const message = GmailApp.getMessageById(messageId);
+
+  PropertiesService.getUserProperties().setProperty(
+    PROP_PREFIX + messageId,
+    JSON.stringify({
+      messageId: messageId,
+      dueTime: dueTime.getTime(),
+      subject: message.getSubject(),
+      sender: message.getFrom()
+    })
+  );
+
+  ensureTriggerExists();
+
+  if (minutes === 0) {
+    processDeletions();
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('Conversation deleted.'))
+      .build();
+  }
+
+  // Schedule a pre-deletion reminder, 5 minutes before, if there's enough lead time
+  if (minutes > 10) {
+    const reminderTime = new Date(dueTime.getTime() - 5 * 60 * 1000);
+    PropertiesService.getUserProperties().setProperty(
+      REMINDER_PREFIX + messageId,
+      JSON.stringify({messageId: messageId, reminderTime: reminderTime.getTime(), fired: false})
     );
+  }
 
-    if (fileRes.getResponseCode() !== 200) {
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(
-          buildStatusCard("❌ Failed to fetch part " + (partIndex+1), null, jobId, partIndex)
-        ))
-        .build();
-    }
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText(`Scheduled for ${formatDate(dueTime)}`))
+    .setNavigation(CardService.newNavigation().updateCard(buildMessageCard(messageId, e)))
+    .build();
+}
 
-    // Get job info for custom name and total parts
-    var statusRes2 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
-    var jobInfo;
-    try {
-      jobInfo = JSON.parse(statusRes2.getContentText());
-    } catch(err) {
-      jobInfo = {};
-    }
-    var totalParts  = info.total || 1;
-    var customName  = jobInfo.custom_name || "";
+function cancelDeletion(e) {
+  const messageId = e.parameters.messageId;
+  PropertiesService.getUserProperties().deleteProperty(PROP_PREFIX + messageId);
+  PropertiesService.getUserProperties().deleteProperty(REMINDER_PREFIX + messageId);
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText('Deletion cancelled.'))
+    .setNavigation(CardService.newNavigation().updateCard(buildMessageCard(messageId, e)))
+    .build();
+}
 
-    // Determine target folder
-    var targetFolder;
-    if (totalParts > 1) {
-      // Get folder name — use custom name or real video title
-      var subFolderName = "";
-      if (customName) {
-        subFolderName = customName.replace(/\.(mp4|mp3)$/i, "");
-      } else {
-        // Get real filename from server
-        try {
-          var fnameRes2  = UrlFetchApp.fetch(
-            RENDER_URL + "/filename/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
-            { muteHttpExceptions: true }
-          );
-          var fnameData2 = JSON.parse(fnameRes2.getContentText());
-          var realFname  = fnameData2.filename || "";
-          subFolderName  = realFname.replace(/\.(mp4|mp3|mkv|webm)$/i, "").replace(/_part\d+$/i, "");
-        } catch(err) {
-          subFolderName = "video_" + jobId.substring(0, 8);
-        }
+function getScheduledDeletion(messageId) {
+  const raw = PropertiesService.getUserProperties().getProperty(PROP_PREFIX + messageId);
+  return raw ? JSON.parse(raw) : null;
+}
+
+// ===== TRIGGER MANAGEMENT =====
+
+function ensureTriggerExists() {
+  const triggers = ScriptApp.getProjectTriggers();
+  const exists = triggers.some(t => t.getHandlerFunction() === 'processDeletions');
+  if (!exists) {
+    ScriptApp.newTrigger('processDeletions').timeBased().everyMinutes(5).create();
+  }
+}
+
+// ===== BACKGROUND PROCESSING (runs every 5 min) =====
+
+function processDeletions() {
+  const userProps = PropertiesService.getUserProperties();
+  const props = userProps.getProperties();
+  const now = Date.now();
+
+  Object.keys(props).forEach(key => {
+    if (key.startsWith(REMINDER_PREFIX)) {
+      const reminder = JSON.parse(props[key]);
+      if (!reminder.fired && reminder.reminderTime <= now) {
+        sendReminderEmail(reminder.messageId);
+        reminder.fired = true;
+        userProps.setProperty(key, JSON.stringify(reminder));
       }
-
-      var rootFolder = DriveApp.getFolderById(DRIVE_FOLDER);
-      var existing   = rootFolder.getFoldersByName(subFolderName);
-      if (existing.hasNext()) {
-        targetFolder = existing.next();
-      } else {
-        targetFolder = rootFolder.createFolder(subFolderName);
-      }
-    } else {
-      targetFolder = DriveApp.getFolderById(DRIVE_FOLDER);
+      return;
     }
 
-    // Save this part
-    var blob    = fileRes.getBlob();
-    var isAudio = customName.toLowerCase().endsWith(".mp3") ||
-                  (fileRes.getHeaders()["Content-Type"] || "").indexOf("audio") !== -1;
-    var ext     = isAudio ? ".mp3" : ".mp4";
-    var fname;
-
-    if (customName && totalParts === 1) {
-      fname = customName.replace(/\.(mp4|mp3)$/i, "") + ext;
-    } else if (customName && totalParts > 1) {
-      fname = customName.replace(/\.(mp4|mp3)$/i, "") + " - Part " + (partIndex+1) + ext;
-    } else {
-      // Get real filename from server (preserves Hebrew and Unicode)
+    if (!key.startsWith(PROP_PREFIX)) return;
+    const data = JSON.parse(props[key]);
+    if (data.dueTime <= now) {
       try {
-        var fnameRes  = UrlFetchApp.fetch(
-          RENDER_URL + "/filename/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
-          { muteHttpExceptions: true }
-        );
-        var fnameData = JSON.parse(fnameRes.getContentText());
-        var baseName = (fnameData.filename || "video").replace(/\.(mp4|mp3|mkv|webm)$/i, "").replace(/_part\d+$/i, "");
-      fname = baseName + " - Part " + (partIndex+1) + ext;
-      } catch(err) {
-        fname = "video_part" + String(partIndex+1).padStart(3,"0") + ext;
+        const thread = GmailApp.getMessageById(data.messageId).getThread();
+        logDeletion(data);
+        thread.moveToTrash();
+      } catch (err) {
+        // message already gone
       }
+      userProps.deleteProperty(key);
+      userProps.deleteProperty(REMINDER_PREFIX + data.messageId);
     }
+  });
+}
 
-    blob.setName(fname);
-    blob.setContentType(isAudio ? "audio/mpeg" : "video/mp4");
+function sendReminderEmail(messageId) {
+  try {
+    const data = getScheduledDeletion(messageId);
+    if (!data) return;
+    GmailApp.sendEmail(
+      Session.getActiveUser().getEmail(),
+      'Self-Destruct Reminder: Email deletes in 5 minutes',
+      `The email "${data.subject}" from ${data.sender} will be deleted in 5 minutes. Open Gmail and cancel from the add-on if you want to keep it.`
+    );
+  } catch (err) {
+    // ignore
+  }
+}
 
-    var saved     = targetFolder.createFile(blob);
-    var nextIndex = partIndex + 1;
-    var msg       = "✅ Saved part " + (partIndex+1) + " of " + totalParts + "\n📁 " + saved.getName();
+// ===== AUDIT LOG =====
 
-    if (totalParts > 1 && customName) {
-      msg += "\n📂 Folder: " + customName.replace(/\.(mp4|mp3)$/i, "");
+function logDeletion(data) {
+  try {
+    const sheet = getOrCreateLogSheet();
+    sheet.appendRow([new Date(), data.subject, data.sender, data.messageId]);
+  } catch (err) {
+    // logging failure shouldn't block deletion
+  }
+}
+
+function getOrCreateLogSheet() {
+  const props = PropertiesService.getUserProperties();
+  let sheetId = props.getProperty(LOG_SHEET_PROP);
+  let ss;
+
+  if (sheetId) {
+    try {
+      ss = SpreadsheetApp.openById(sheetId);
+      return ss.getSheetByName('Log');
+    } catch (err) {
+      // sheet was deleted, recreate
     }
+  }
 
-    if (nextIndex < totalParts || info.job_status !== "done") {
-      msg += "\n\n⏳ More parts remaining.";
-      // Build card with open button + next part button
-      var card          = CardService.newCardBuilder();
-      var statusSection = CardService.newCardSection().setHeader("📊 Status");
-      statusSection.addWidget(CardService.newTextParagraph().setText(msg));
-      statusSection.addWidget(
-        CardService.newTextButton()
-          .setText("📂 Open in Drive")
-          .setOpenLink(CardService.newOpenLink().setUrl(saved.getUrl()))
-      );
-      statusSection.addWidget(
-        CardService.newTextButton()
-          .setText("▶️ Save Part " + (nextIndex + 1))
-          .setOnClickAction(
-            CardService.newAction()
-              .setFunctionName("onCheckStatus")
-              .setParameters({ job_id: jobId, part_index: String(nextIndex) })
+  ss = SpreadsheetApp.create('Self-Destruct Email Log');
+  props.setProperty(LOG_SHEET_PROP, ss.getId());
+  const sheet = ss.getActiveSheet().setName('Log');
+  sheet.appendRow(['Deleted At', 'Subject', 'Sender', 'Message ID']);
+  return sheet;
+}
+
+// ===== DASHBOARD HOMEPAGE =====
+
+function onHomepageOpen(e) {
+  const userProps = PropertiesService.getUserProperties();
+  const props = userProps.getProperties();
+  const scheduled = [];
+
+  Object.keys(props).forEach(key => {
+    if (key.startsWith(PROP_PREFIX)) {
+      scheduled.push(JSON.parse(props[key]));
+    }
+  });
+
+  scheduled.sort((a, b) => a.dueTime - b.dueTime);
+
+  const card = CardService.newCardBuilder();
+  const section = CardService.newCardSection().setHeader(`Scheduled Deletions (${scheduled.length})`);
+
+  if (scheduled.length === 0) {
+    section.addWidget(CardService.newTextParagraph().setText('Nothing scheduled right now.'));
+  } else {
+    scheduled.forEach(item => {
+      const dueDate = new Date(item.dueTime);
+      section.addWidget(
+        CardService.newDecoratedText()
+          .setText(item.subject || '(no subject)')
+          .setBottomLabel(`${item.sender} • ${formatDate(dueDate)}`)
+          .setStartIcon(CardService.newIconImage().setIcon(CardService.Icon.CLOCK).setIconColor(urgencyColor(dueDate)))
+          .setButton(
+            CardService.newTextButton()
+              .setText('Cancel')
+              .setOnClickAction(CardService.newAction().setFunctionName('cancelFromDashboard').setParameters({messageId: item.messageId}))
           )
       );
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(card.addSection(statusSection).build()))
-        .build();
-
-    } else {
-      // All done — add to history
-      var historyLinks = [];
-      if (totalParts === 1) {
-        historyLinks.push(saved.getUrl());
-      } else {
-        historyLinks.push(targetFolder.getUrl());
-      }
-      addToHistory(customName || fname, totalParts, historyLinks);
-
-      msg += "\n\n🎉 All " + totalParts + " parts saved!";
-      if (totalParts > 1) msg += " Play them in order.";
-
-      // Clear active job
-      PropertiesService.getUserProperties().deleteProperty("active_job_id");
-
-      // Build card with open button
-      var card          = CardService.newCardBuilder();
-      var statusSection = CardService.newCardSection().setHeader("📊 Status");
-      statusSection.addWidget(CardService.newTextParagraph().setText(msg));
-      statusSection.addWidget(
-        CardService.newTextButton()
-          .setText("📂 Open in Drive")
-          .setOpenLink(CardService.newOpenLink().setUrl(totalParts > 1 ? targetFolder.getUrl() : saved.getUrl()))
-      );
-      statusSection.addWidget(
-        CardService.newTextButton()
-          .setText("⬇️ Download Another Video")
-          .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"))
-      );
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(card.addSection(statusSection).build()))
-        .build();
-    }
-
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
-      .build();
+    });
   }
-}
-function checkLastJob() {
-  var jobId = "PASTE_YOUR_LAST_JOB_ID_HERE";
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
-  Logger.log(response.getContentText());
-}
-function checkJobDebug() {
-  var jobId = "902c25ec-e32d-4394-8fae-28cffd3b6129";
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
-  Logger.log(response.getContentText());
-}
-function debugJob() {
-  var jobId = "902c25ec-e32d-4394-8fae-28cffd3b6129";
-  var response = UrlFetchApp.fetch(
-    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET)
-  );
-  Logger.log(response.getContentText());
-}
-function debugLatest() {
-  var jobId = "0a00b5cc-6093-40dd-8517-318437f7ce33";
-  var response = UrlFetchApp.fetch(
-    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
-    { muteHttpExceptions: true }
-  );
-  Logger.log(response.getContentText());
-}
-// ── Download History ───────────────────────────────────────────────────────
-function getHistory() {
-  var props = PropertiesService.getUserProperties();
-  var raw   = props.getProperty("download_history");
-  return raw ? JSON.parse(raw) : [];
-}
-
-function addToHistory(name, parts, links) {
-  var props   = PropertiesService.getUserProperties();
-  var history = getHistory();
-  history.unshift({
-    name:  name,
-    parts: parts,
-    links: links,
-    date:  new Date().toLocaleString()
-  });
-  // Keep only last 20 entries
-  if (history.length > 20) history = history.slice(0, 20);
-  props.setProperty("download_history", JSON.stringify(history));
-}
-
-function buildHistoryCard() {
-  var card       = CardService.newCardBuilder();
-  var navSection = CardService.newCardSection();
-  var homeBtnTop = CardService.newTextButton()
-    .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  navSection.addWidget(homeBtnTop);
-  card.addSection(navSection);
-
-  var section = CardService.newCardSection().setHeader("🕐 Download History");
-  var history = getHistory();
-
-  if (history.length === 0) {
-    section.addWidget(CardService.newTextParagraph().setText("No downloads yet."));
-  } else {
-    for (var i = 0; i < history.length; i++) {
-      var h   = history[i];
-      var txt = "📁 " + h.name + "\n🗓 " + h.date + "\n📦 " + h.parts + " part(s)";
-      for (var j = 0; j < h.links.length; j++) {
-        txt += "\n🔗 " + h.links[j];
-      }
-      section.addWidget(CardService.newTextParagraph().setText(txt));
-      if (i < history.length - 1) {
-        section.addWidget(CardService.newDivider());
-      }
-    }
-  }
-
-  var backBtn = CardService.newTextButton()
-    .setText("← Back")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  section.addWidget(backBtn);
-
-  var clearBtn = CardService.newTextButton()
-    .setText("🗑 Clear History")
-    .setOnClickAction(CardService.newAction().setFunctionName("clearHistory"));
-  section.addWidget(clearBtn);
 
   card.addSection(section);
   return card.build();
 }
 
-function clearHistory() {
-  PropertiesService.getUserProperties().deleteProperty("download_history");
+function cancelFromDashboard(e) {
+  const messageId = e.parameters.messageId;
+  PropertiesService.getUserProperties().deleteProperty(PROP_PREFIX + messageId);
+  PropertiesService.getUserProperties().deleteProperty(REMINDER_PREFIX + messageId);
   return CardService.newActionResponseBuilder()
-    .setNavigation(CardService.newNavigation().updateCard(buildHistoryCard()))
+    .setNotification(CardService.newNotification().setText('Cancelled.'))
+    .setNavigation(CardService.newNavigation().updateCard(onHomepageOpen(e)))
     .build();
 }
 
-function onViewHistory(e) {
-  return CardService.newActionResponseBuilder()
-    .setNavigation(CardService.newNavigation().pushCard(buildHistoryCard()))
-    .build();
-}
-// ── YouTube Search ─────────────────────────────────────────────────────────
-function onYouTubeSearch(query, audioOnly, cookiesContent) {
-  try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify({
-        secret:          API_SECRET,
-        query:           query,
-        cookies_content: cookiesContent,
-        page:            0
-      }),
-      muteHttpExceptions: true
-    });
+// ===== UTILITIES =====
 
-    var code = response.getResponseCode();
-    var body = JSON.parse(response.getContentText());
-
-    if (code !== 200 || !body.results) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ No results found. Try different search terms."))
-        .build();
-    }
-
-    var newCard = buildSearchResultsCard(body.results, audioOnly, query, body.has_more, body.next_page);
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(newCard))
-      .build();
-
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Search failed: " + err.message))
-      .build();
-  }
+function urgencyColor(dueDate) {
+  const minsLeft = (dueDate.getTime() - Date.now()) / 60000;
+  if (minsLeft <= 60) return '#EA4335';      // red — urgent
+  if (minsLeft <= 1440) return '#FBBC04';    // yellow — soon
+  return '#34A853';                          // green — far out
 }
 
-function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
-  var card       = CardService.newCardBuilder();
-  var navSection = CardService.newCardSection();
-  var homeBtnTop = CardService.newTextButton()
-    .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  navSection.addWidget(homeBtnTop);
-  card.addSection(navSection);
-
-  var section = CardService.newCardSection().setHeader("🔍 Search Results");
-
-  for (var i = 0; i < results.length; i++) {
-    var r = results[i];
-
-    // Thumbnail
-    try {
-      var proxiedThumb = RENDER_URL + "/thumbnail?url=" + encodeURIComponent(r.thumbnail);
-      var img = CardService.newImage()
-        .setImageUrl(proxiedThumb)
-        .setAltText(r.title);
-      section.addWidget(img);
-    } catch(e) {}
-
-    // Title + info
-    var info = "🎬 " + r.title + "\n" +
-               "📺 " + r.channel + "\n" +
-               (r.duration ? "⏱ " + r.duration + "   " : "") + "📅 " + r.date;
-    section.addWidget(CardService.newTextParagraph().setText(info));
-
-    // Download button
-    var downloadBtn = CardService.newTextButton()
-      .setText(audioOnly ? "🎵 Download MP3" : "⬇️ Download Video")
-      .setOnClickAction(
-        CardService.newAction()
-          .setFunctionName("onDownloadSearchResult")
-          .setParameters({
-            video_url:  r.url,
-            audio_only: audioOnly ? "yes" : "no"
-          })
-      );
-    section.addWidget(downloadBtn);
-    section.addWidget(CardService.newDivider());
-  }
-
-  if (hasMore) {
-    var loadMoreBtn = CardService.newTextButton()
-      .setText("➕ Load More Results")
-      .setOnClickAction(
-        CardService.newAction()
-          .setFunctionName("onLoadMoreResults")
-          .setParameters({
-            query:      query || "",
-            audio_only: audioOnly ? "yes" : "no",
-            next_page:  String(nextPage || 1)
-          })
-      );
-    section.addWidget(loadMoreBtn);
-  }
-
-  var backBtn = CardService.newTextButton()
-    .setText("← Back")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
-  section.addWidget(backBtn);
-
-  card.addSection(section);
-  return card.build();
-}
-
-function onLoadMoreResults(e) {
-  var query     = e.parameters.query;
-  var audioOnly = e.parameters.audio_only === "yes";
-  var page      = parseInt(e.parameters.next_page || "1");
-
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
-  var cookiesContent = "";
-  if (cookiesFileId) {
-    try {
-      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-    } catch(err) {}
-  }
-
-  try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify({
-        secret:          API_SECRET,
-        query:           query,
-        cookies_content: cookiesContent,
-        page:            page
-      }),
-      muteHttpExceptions: true
-    });
-
-    var body = JSON.parse(response.getContentText());
-    if (response.getResponseCode() !== 200 || !body.results) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ No more results found."))
-        .build();
-    }
-
-    var newCard = buildSearchResultsCard(body.results, audioOnly, query, body.has_more, body.next_page);
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().pushCard(newCard))
-      .build();
-
-  } catch(err) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("❌ Error: " + err.message))
-      .build();
-  }
-}
-
-function onDownloadSearchResult(e) {
-  var url       = e.parameters.video_url;
-  var audioOnly = e.parameters.audio_only === "yes";
-
-  // Get saved cookies
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id") || "";
-  var cookiesContent = "";
-  if (cookiesFileId) {
-    try {
-      cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-    } catch(err) {}
-  }
-
-  if (audioOnly) {
-    // Check cookies first
-    var checkRes  = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
-      muteHttpExceptions: true
-    });
-    var checkBody = JSON.parse(checkRes.getContentText());
-    var checkErr  = checkBody.stderr || "";
-    if (checkErr.indexOf("Sign in") !== -1 || checkErr.indexOf("bot") !== -1 ||
-        checkErr.indexOf("rotated") !== -1 || checkErr.indexOf("cookies") !== -1) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Search again."))
-        .build();
-    }
-
-    // Download audio directly
-    var payload = {
-      url:             url,
-      secret:          API_SECRET,
-      cookies_content: cookiesContent,
-      format_id:       "bestaudio",
-      custom_name:     "",
-      folder_id:       DRIVE_FOLDER,
-      audio_only:      true
-    };
-    var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify(payload),
-      muteHttpExceptions: true
-    });
-    var rawText = response.getContentText();
-    var body;
-    try {
-      body = JSON.parse(rawText);
-    } catch(err) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Server error. Try again in a moment."))
-        .build();
-    }
-    if (response.getResponseCode() === 202) {
-      PropertiesService.getUserProperties().setProperty("active_job_id", body.job_id);
-      PropertiesService.getUserProperties().setProperty("active_part_index", "0");
-      return CardService.newActionResponseBuilder()
-        .setNavigation(CardService.newNavigation().updateCard(
-          buildStatusCard("⏳ Download started!\n\nClick 'Check Status' in ~1-2 min.", body.job_id)
-        ))
-        .build();
-    }
-
-  } else {
-    // Show format picker — same as normal video download
-    var formatsRes = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-      method:             "post",
-      contentType:        "application/json",
-      payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
-      muteHttpExceptions: true
-    });
-    var formatsRaw = formatsRes.getContentText();
-    var formatsBody;
-    try {
-      formatsBody = JSON.parse(formatsRaw);
-    } catch(err) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Server error fetching formats. Try again."))
-        .build();
-    }
-    var stdout      = formatsBody.stdout || "";
-    var stderr      = formatsBody.stderr || "";
-
-    if (!stdout || stderr) {
-      var errMsg = stderr;
-      if (errMsg.indexOf("Sign in") !== -1 || errMsg.indexOf("bot") !== -1 ||
-          errMsg.indexOf("rotated") !== -1 || errMsg.indexOf("cookies") !== -1) {
-        return CardService.newActionResponseBuilder()
-          .setNotification(CardService.newNotification().setText("❌ YouTube cookies expired!\n\n1. Export fresh cookies.txt from Chrome\n2. In Google Drive, right-click your cookies file → 'Manage versions' → 'Upload new version'\n3. Search again."))
-          .build();
-      }
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ Could not get formats: " + errMsg.substring(0, 200)))
-        .build();
-    }
-
-    // Parse formats
-    var formats = [];
-    var lines   = stdout.split("\n");
-    for (var i = 0; i < lines.length; i++) {
-      var line  = lines[i].trim();
-      var match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+/);
-      if (!match) continue;
-      var id          = match[1];
-      var ext         = match[2];
-      var resolution  = match[3];
-      var isAudioOnly = line.indexOf("audio only") !== -1;
-      if (isAudioOnly) continue;
-      var sizeMatch = line.match(/\|\s*[~≈]?([\d.]+)(MiB|GiB)\s/);
-      if (!sizeMatch) continue;
-      var sizeMB = sizeMatch[2] === "GiB" ? parseFloat(sizeMatch[1]) * 1024 : parseFloat(sizeMatch[1]);
-      if (sizeMB > 800) continue;
-      formats.push({ id: id, label: id + " | " + ext + " | " + resolution + " | " + sizeMatch[1] + sizeMatch[2] });
-    }
-    formats.unshift({ id: "best", label: "🏆 Best available — auto (≤800MB only)" });
-
-    if (formats.length <= 1) {
-      return CardService.newActionResponseBuilder()
-        .setNotification(CardService.newNotification().setText("❌ No formats found."))
-        .build();
-    }
-
-    var newCard = buildFormatCard(url, "", "", formats, false);
-    return CardService.newActionResponseBuilder()
-      .setNavigation(CardService.newNavigation().updateCard(newCard))
-      .build();
-  }
-}
-function checkProperties() {
-  var props = PropertiesService.getUserProperties().getProperties();
-  Logger.log(JSON.stringify(props));
-}
-function debugAudioFormats() {
-  var cookiesFileId  = "1MsjoeHV6m3HzyLKx7TVkO6raSbBUbiDI";
-  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret:          API_SECRET,
-      url:             "https://www.youtube.com/watch?v=YxLx8T4_a_U",
-      cookies_content: cookiesContent
-    })
-  });
-  Logger.log(response.getContentText());
-}
-function saveCookiesId() {
-  PropertiesService.getUserProperties().setProperty("youtube_cookies_id", "1SSbEUsKzMtg9u86slxc5qC_3gmB4Q2Hu");
-}
-function checkLastError() {
-  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
-  Logger.log(response.getContentText());
-}
-function checkCookies() {
-  var cookiesId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  Logger.log("Cookies ID: " + cookiesId);
-  try {
-    var content = DriveApp.getFileById(cookiesId).getBlob().getDataAsString();
-    Logger.log("Cookies length: " + content.length);
-    Logger.log("First 200 chars: " + content.substring(0, 200));
-  } catch(e) {
-    Logger.log("Error: " + e.message);
-  }
-}
-function saveCookiesId() {
-  PropertiesService.getUserProperties().setProperty("youtube_cookies_id", "1SSbEUsKzMtg9u86slxc5qC_3gmB4Q2Hu");
-}
-function checkRunning() {
-  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
-  Logger.log(response.getContentText());
-}
-function checkRunning() {
-  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
-  Logger.log(response.getContentText());
-}
-function debugLatestJob() {
-  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(
-    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
-    { muteHttpExceptions: true }
-  );
-  Logger.log(response.getContentText());
-}
-function testSearch() {
-  var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-    method:             "post",
-    contentType:        "application/json",
-    payload:            JSON.stringify({
-      secret:          API_SECRET,
-      query:           "bach piano",
-      cookies_content: cookiesContent
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function testSearchChannel() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      query:  "Sruly Green",
-      page:   0
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function debugChannel() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_channel", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({ secret: API_SECRET }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function debugRSS() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_rss", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({ secret: API_SECRET }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function checkLastStatus() {
-  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(
-    RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
-    { muteHttpExceptions: true }
-  );
-  Logger.log("Code: " + response.getResponseCode());
-  Logger.log("Body: " + response.getContentText().substring(0, 500));
-}
-function diagnose() {
-  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  Logger.log("Job ID: " + jobId);
-  
-  var r1 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
-  Logger.log("Status code: " + r1.getResponseCode());
-  Logger.log("Status body: " + r1.getContentText().substring(0, 300));
-  
-  var r2 = UrlFetchApp.fetch(RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
-  Logger.log("Part_ready code: " + r2.getResponseCode());
-  Logger.log("Part_ready body: " + r2.getContentText().substring(0, 300));
-}
-function diagnoseDrive() {
-  var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  Logger.log("Job ID: " + jobId);
-  
-  var r1 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
-  Logger.log("Status: " + r1.getContentText().substring(0, 300));
-  
-  var r2 = UrlFetchApp.fetch(RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
-  Logger.log("Part ready: " + r2.getContentText().substring(0, 300));
-}
-function checkFormatsDebug() {
-  var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret:          API_SECRET,
-      url:             "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-      cookies_content: cookiesContent
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function testProxy() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_proxy", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({ secret: API_SECRET }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function testProxyDirect() {
-  var response = UrlFetchApp.fetch("http://httpbin.org/ip", {
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function checkFormatsDebug() {
-  var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret:          API_SECRET,
-      url:             "https://www.youtube.com/watch?v=YxLx8T4_a_U",
-      cookies_content: cookiesContent
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function testOracleSearch() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      query: "bach piano",
-      page: 0
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText().substring(0, 500));
-}
-function checkThumbUrl() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      query: "bach piano",
-      page: 0
-    }),
-    muteHttpExceptions: true
-  });
-  var body = JSON.parse(response.getContentText());
-  var thumb = body.results[0].thumbnail;
-  Logger.log("Thumbnail: [" + thumb + "]");
-  Logger.log("Length: " + thumb.length);
-  Logger.log("Type: " + typeof thumb);
-}
-function testThumbnail() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      query: "bach piano",
-      page: 0
-    }),
-    muteHttpExceptions: true
-  });
-  var body = JSON.parse(response.getContentText());
-  var thumbUrl = body.results[0].thumbnail;
-  Logger.log("Thumbnail URL: " + thumbUrl);
-  
-  // Try fetching the image directly
-  var imgResponse = UrlFetchApp.fetch(thumbUrl, {muteHttpExceptions: true});
-  Logger.log("Image fetch code: " + imgResponse.getResponseCode());
-  Logger.log("Content-Type: " + imgResponse.getHeaders()["Content-Type"]);
-}
-function testChannelThumbs() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      query: "Sruly Green",
-      page: 0
-    }),
-    muteHttpExceptions: true
-  });
-  var body = JSON.parse(response.getContentText());
-  for (var i = 0; i < body.results.length; i++) {
-    Logger.log(i + ": [" + body.results[i].thumbnail + "]");
-  }
-}
-function getCurrentCookies() {
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var file = DriveApp.getFileById(cookiesFileId);
-  var content = file.getBlob().getDataAsString();
-  Logger.log(content.substring(0, 200));
-  Logger.log("Length: " + content.length);
-}
-function debugBestFormat() {
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var file = DriveApp.getFileById(cookiesFileId);
-  var cookiesContent = file.getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
-      cookies_content: cookiesContent
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function debugListFormats() {
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var file = DriveApp.getFileById(cookiesFileId);
-  var cookiesContent = file.getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
-      cookies_content: cookiesContent,
-      mode: "list"
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function debugTestFmt() {
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var file = DriveApp.getFileById(cookiesFileId);
-  var cookiesContent = file.getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
-      cookies_content: cookiesContent,
-      fmt: "bestvideo[filesize_approx<800M]+bestaudio[ext=m4a]/best[filesize_approx<800M]/best"
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function debugTestFmt2() {
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var file = DriveApp.getFileById(cookiesFileId);
-  var cookiesContent = file.getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
-      cookies_content: cookiesContent,
-      fmt: "bv*[filesize_approx<800M]+ba/b[filesize_approx<800M]/best"
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function debugTestFmt3() {
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var file = DriveApp.getFileById(cookiesFileId);
-  var cookiesContent = file.getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
-      cookies_content: cookiesContent,
-      fmt: "bv*+ba/b"
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
-}
-function debugTestFmt4() {
-  var cookiesFileId = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
-  var file = DriveApp.getFileById(cookiesFileId);
-  var cookiesContent = file.getBlob().getDataAsString();
-  
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      secret: API_SECRET,
-      url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
-      cookies_content: cookiesContent,
-      fmt: "bv*[filesize_approx<800M]+ba/b"
-    }),
-    muteHttpExceptions: true
-  });
-  Logger.log(response.getContentText());
+function formatDate(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'EEE, MMM d, h:mm a');
 }

@@ -1,29 +1,33 @@
 {
-  "timeZone": "America/New_York",
+  "timeZone": "Asia/Jerusalem",
   "dependencies": {},
-  "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8",
   "oauthScopes": [
     "https://www.googleapis.com/auth/gmail.addons.execute",
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/script.external_request",
-    "https://www.googleapis.com/auth/script.locale",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/script.storage"
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/spreadsheets"
   ],
   "addOns": {
     "common": {
-      "name": "VidBot",
-      "logoUrl": "https://deutsch.great-site.net/wp-content/uploads/2026/06/Logo-Icon.png",
-      "useLocaleFromApp": true,
+      "name": "Self-Destruct Email",
+      "logoUrl": "https://www.gstatic.com/images/icons/material/system/2x/timer_googblue_48dp.png",
       "layoutProperties": {
-        "primaryColor": "#1A73E8"
+        "primaryColor": "#4285F4",
+        "secondaryColor": "#EA4335"
+      },
+      "homepageTrigger": {
+        "runFunction": "onHomepageOpen"
       }
     },
     "gmail": {
-      "homepageTrigger": {
-        "runFunction": "buildAddOn"
-      }
+      "contextualTriggers": [
+        {
+          "unconditional": {},
+          "onTriggerFunction": "onGmailMessageOpen"
+        }
+      ],
+      "primaryColor": "#4285F4",
+      "secondaryColor": "#EA4335"
     }
   }
 }
