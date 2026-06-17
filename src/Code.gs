@@ -521,7 +521,13 @@ function pollJobs() {
           }
           _removeScheduledLabel(job.threadId);
         }
-        _logToDigest(job);
+        // Capture sender before trashing (thread still accessible here)
+        var senderName = '';
+        try {
+          var messages = thread ? thread.getMessages() : [];
+          if (messages.length > 0) senderName = messages[0].getFrom();
+        } catch (err) {}
+        _logToDigest(job, senderName);
         props.deleteProperty(key);
         return; // skip the save below
       }
@@ -560,7 +566,9 @@ function _maybeSendDailyDigest(props, settings, userEmail) {
 
   var lines = entries.map(function(entry) {
     var actionWord = entry.action === 'archive' ? 'Archived' : 'Trashed';
-    return actionWord + ' at ' + formatDateTime(new Date(entry.targetMs)) + ':\n  ' + entry.subject;
+    var line = actionWord + ' at ' + formatDateTime(new Date(entry.targetMs)) + ':\n  Subject: ' + entry.subject;
+    if (entry.sender) line += '\n  From: ' + entry.sender;
+    return line;
   });
 
   var body =
@@ -570,7 +578,7 @@ function _maybeSendDailyDigest(props, settings, userEmail) {
 
   GmailApp.sendEmail(
     userEmail,
-    '\uD83D\uDCCB Weekly Digest \u2014 Schedule to Trash (' + entries.length + ' items)',
+    'Weekly Digest - Schedule to Trash (' + entries.length + ' items)',
     body
   );
 
@@ -812,11 +820,11 @@ function _removeScheduledLabel(threadId) {
   }
 }
 
-function _logToDigest(job) {
+function _logToDigest(job, sender) {
   var props = PropertiesService.getUserProperties();
   var existing = [];
   try { existing = JSON.parse(props.getProperty('digest_log') || '[]'); } catch (err) {}
-  existing.push({ subject: job.subject, targetMs: job.targetMs, action: job.action });
+  existing.push({ subject: job.subject, targetMs: job.targetMs, action: job.action, sender: sender || '' });
   props.setProperty('digest_log', JSON.stringify(existing));
 }
 
