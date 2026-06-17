@@ -11,13 +11,12 @@
 //  - Archive instead of Trash option (per-job choice)
 //  - Mark as Unread when actioned (snooze feel)
 //  - Label thread as "scheduled-trash" so it's visible in sidebar
-//  - Pre-trash warning email ~1 hour before firing
 //  - Daily digest email of what was trashed automatically
 //  - Homepage card: view ALL pending jobs across all threads
 //  - Reliable trigger matching via trigger handler name embedding
 //  - Detects if thread is already in trash
 //  - Timezone auto-follows Google Calendar (works while travelling)
-//  - Settings card: toggle snooze, warnings, digest, action type
+//  - Settings card: toggle snooze, digest, action type
 // ============================================================
 
 
@@ -27,8 +26,7 @@
 var SETTINGS_DEFAULTS = {
   actionType:      'trash',   // 'trash' | 'archive'
   markUnread:      'true',    // mark as unread when actioned
-  warnBefore:      'true',    // send warning email ~1 hour before
-  dailyDigest:     'true',    // daily summary of auto-trashed threads
+  weeklyDigest:    'true',    // weekly summary of auto-trashed threads
   labelThreads:    'true',    // apply "scheduled-trash" label
 };
 
@@ -51,7 +49,6 @@ function saveSetting(key, value) {
 // HOMEPAGE CARD — shows all pending jobs across all threads
 // ============================================================
 function buildHomePage(e) {
-  pollJobs(); // process any due jobs on every card open
   var card = CardService.newCardBuilder()
     .setHeader(
       CardService.newCardHeader()
@@ -131,9 +128,6 @@ function buildAddOn(e) {
 
   var displaySubject = subject.length > 45 ? subject.substring(0, 42) + '...' : subject;
   var now = new Date();
-
-  // Process any due jobs every time a card is opened
-  pollJobs();
 
   // --- Check if already in trash ---
   if (thread.isInTrash()) {
@@ -435,7 +429,6 @@ function postponeJob(e) {
     var newTarget = new Date(job.targetMs + extraMinutes * 60 * 1000);
 
     job.targetMs = newTarget.getTime();
-    job.warnSent = false; // reset so warning fires again at new time
     props.setProperty(jobKey, JSON.stringify(job));
 
     var extraLabel = extraMinutes >= 60 ? (extraMinutes / 60) + 'h' : extraMinutes + 'm';
@@ -475,17 +468,35 @@ function cancelScheduledTrash(e) {
 
 
 // ============================================================
-// POLLER — runs every hour, handles all jobs
-// This is the ONLY time-based trigger we create (besides daily digest).
-// No per-job triggers are ever created, so we never hit Google's 20-trigger limit.
+// ONE-TIME SETUP — run this ONCE manually from the Apps Script editor:
+//   1. Open script.google.com → your project
+//   2. Select "setupTrigger" from the function dropdown
+//   3. Click Run ▶
+// This creates a single hourly trigger that runs forever.
+// It will never hit Google's limit because it's just 1 trigger total.
 // ============================================================
-function pollJobs() {
-  // Runs on every card open — no triggers needed at all.
-  // Also cleans up any leftover triggers from old versions.
+function setupTrigger() {
+  // Remove any existing pollJobs triggers to avoid duplicates
   ScriptApp.getProjectTriggers().forEach(function(t) {
     ScriptApp.deleteTrigger(t);
   });
 
+  // Create the single hourly trigger
+  ScriptApp.newTrigger('pollJobs')
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  Logger.log('✅ Hourly trigger created. Jobs will fire within 1 hour of their scheduled time.');
+}
+
+
+// ============================================================
+// POLLER — runs every hour, handles all jobs
+// This is the ONLY time-based trigger needed.
+// No per-job triggers are ever created, so we never hit Google's 20-trigger limit.
+// ============================================================
+function pollJobs() {
   var props     = PropertiesService.getUserProperties();
   var allProps  = props.getProperties();
   var settings  = getSettings();
@@ -497,28 +508,6 @@ function pollJobs() {
     try {
       var job     = JSON.parse(allProps[key]);
       var changed = false;
-
-      // --- Warning email: send ~1 hour before if not yet sent ---
-      if (settings.warnBefore === 'true' && !job.warnSent) {
-        var warnAt = job.targetMs - 60 * 60 * 1000;
-        if (now >= warnAt && now < job.targetMs) {
-          var actionWord = job.action === 'archive' ? 'archived' : 'moved to Trash';
-          var warnBody =
-            'Hi,\n\n' +
-            'This is a reminder that the following email will be ' + actionWord + ' in ~1 hour:\n\n' +
-            'Subject: ' + job.subject + '\n' +
-            'Scheduled for: ' + formatDateTime(new Date(job.targetMs)) + '\n\n' +
-            'To cancel, open the email in Gmail and use the Schedule to Trash add-on.\n\n' +
-            '\u2014 Schedule to Trash Add-on';
-          GmailApp.sendEmail(
-            userEmail,
-            '\u23F0 Reminder: Email will be ' + actionWord + ' soon \u2014 ' + job.subject,
-            warnBody
-          );
-          job.warnSent = true;
-          changed = true;
-        }
-      }
 
       // --- Execute: scheduled time has passed ---
       if (now >= job.targetMs) {
@@ -545,22 +534,22 @@ function pollJobs() {
     }
   });
 
-  // --- Daily digest: send if 24h have passed since last send ---
+  // --- Weekly digest: send if 7 days have passed since last send ---
   _maybeSendDailyDigest(props, settings, userEmail);
 }
 
 
 // ============================================================
 // DAILY DIGEST — called from pollJobs(), no trigger needed.
-// Sends at most once per 24 hours, tracked via last_digest_ms property.
+// Sends at most once per 7 days, tracked via last_digest_ms property.
 // ============================================================
 function _maybeSendDailyDigest(props, settings, userEmail) {
-  if (settings.dailyDigest !== 'true') return;
+  if (settings.weeklyDigest !== 'true') return;
 
   var now          = Date.now();
   var lastSent     = parseInt(props.getProperty('last_digest_ms') || '0', 10);
-  var twentyFourH  = 24 * 60 * 60 * 1000;
-  if (now - lastSent < twentyFourH) return; // not yet 24h since last digest
+  var oneWeek = 7 * 24 * 60 * 60 * 1000;
+  if (now - lastSent < oneWeek) return; // not yet 7 days since last digest
 
   var digestRaw = props.getProperty('digest_log');
   if (!digestRaw) return;
@@ -575,13 +564,13 @@ function _maybeSendDailyDigest(props, settings, userEmail) {
   });
 
   var body =
-    'Here is your daily summary of automatically actioned emails:\n\n' +
+    'Here is your weekly summary of automatically actioned emails:\n\n' +
     lines.join('\n\n') +
     '\n\n\u2014 Schedule to Trash Add-on';
 
   GmailApp.sendEmail(
     userEmail,
-    '\uD83D\uDCCB Daily Digest \u2014 Schedule to Trash (' + entries.length + ' items)',
+    '\uD83D\uDCCB Weekly Digest \u2014 Schedule to Trash (' + entries.length + ' items)',
     body
   );
 
@@ -633,34 +622,17 @@ function buildSettingsCard(e) {
 
   toggleSection.addWidget(
     CardService.newDecoratedText()
-      .setText('Warning email ~1 hour before')
-      .setTopLabel('Heads-up ~1 hour before so you can cancel')
+      .setText('Weekly digest email')
+      .setTopLabel('Weekly summary of auto-actioned emails')
       .setSwitchControl(
         CardService.newSwitch()
-          .setFieldName('warnBefore')
+          .setFieldName('weeklyDigest')
           .setValue('true')
-          .setSelected(settings.warnBefore === 'true')
+          .setSelected(settings.weeklyDigest === 'true')
           .setOnChangeAction(
             CardService.newAction()
               .setFunctionName('saveToggleSetting')
-              .setParameters({ settingKey: 'warnBefore' })
-          )
-      )
-  );
-
-  toggleSection.addWidget(
-    CardService.newDecoratedText()
-      .setText('Daily digest email')
-      .setTopLabel('Summary of what was auto-actioned today')
-      .setSwitchControl(
-        CardService.newSwitch()
-          .setFieldName('dailyDigest')
-          .setValue('true')
-          .setSelected(settings.dailyDigest === 'true')
-          .setOnChangeAction(
-            CardService.newAction()
-              .setFunctionName('saveToggleSetting')
-              .setParameters({ settingKey: 'dailyDigest' })
+              .setParameters({ settingKey: 'weeklyDigest' })
           )
       )
   );
@@ -682,7 +654,21 @@ function buildSettingsCard(e) {
       )
   );
 
-  card.addSection(actionSection).addSection(toggleSection);
+  // Setup instructions section
+  var setupSection = CardService.newCardSection().setHeader('⚙️ One-time Setup');
+  setupSection.addWidget(
+    CardService.newTextParagraph()
+      .setText(
+        'To make jobs fire even when Gmail is closed:\n\n' +
+        '1. Go to script.google.com\n' +
+        '2. Open this project\n' +
+        '3. Select "setupTrigger" from the function dropdown\n' +
+        '4. Click Run ▶\n\n' +
+        'This only needs to be done once. It creates a single hourly trigger that runs forever.'
+      )
+  );
+
+  card.addSection(actionSection).addSection(toggleSection).addSection(setupSection);
 
   return CardService.newActionResponseBuilder()
     .setNavigation(CardService.newNavigation().pushCard(card.build()))
@@ -797,7 +783,6 @@ function _createTriggerAndStore(threadId, subject, targetTime, label, action) {
     label:      label,
     action:     action || 'trash',
     markUnread: settings.markUnread === 'true',
-    warnSent:   false
   };
   PropertiesService.getUserProperties().setProperty(jobId, JSON.stringify(job));
   return jobId;
