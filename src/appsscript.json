@@ -1,39 +1,29 @@
 {
-  "timeZone": "Asia/Jerusalem",
+  "timeZone": "America/New_York",
   "dependencies": {},
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
   "oauthScopes": [
-    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.addons.execute",
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.labels",
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/script.scriptapp",
-    "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/script.locale",
-    "https://www.googleapis.com/auth/gmail.addons.execute",
-    "https://www.googleapis.com/auth/calendar.readonly"
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/script.storage"
   ],
   "addOns": {
     "common": {
-      "name": "Schedule to Trash",
-      "logoUrl": "https://www.gstatic.com/images/icons/material/system/2x/delete_grey600_24dp.png",
+      "name": "VidBot",
+      "logoUrl": "https://deutsch.great-site.net/wp-content/uploads/2026/06/Logo-Icon.png",
       "useLocaleFromApp": true,
-      "homepageTrigger": {
-        "runFunction": "buildHomePage"
+      "layoutProperties": {
+        "primaryColor": "#1A73E8"
       }
     },
     "gmail": {
       "homepageTrigger": {
-        "runFunction": "buildHomePage"
-      },
-      "contextualTriggers": [
-        {
-          "unconditional": {},
-          "onTriggerFunction": "buildAddOn"
-        }
-      ]
+        "runFunction": "buildAddOn"
+      }
     }
   }
 }
