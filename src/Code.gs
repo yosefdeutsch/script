@@ -475,10 +475,10 @@ function onCheckStatus(e) {
         qHistoryName = qCustomName || qLinks[0].name;
       } else if (qLinks[0].type === "folder_download") {
         var folderUrl = qLinks[0].folder_link;
-        qMsg = "✅ Saved to Drive!\n\n📂 " + qLinks.length + " files saved to folder";
-        if (qCustomName) qMsg += "\n📁 " + qCustomName;
+        var folderName = qLinks[0].folder_name || qCustomName || "Drive Folder";
+        qMsg = "✅ Saved to Drive!\n\n📂 " + folderName;
         qOpenUrl = folderUrl;
-        qHistoryName = qCustomName || "Drive Folder";
+        qHistoryName = folderName;
       } else {
         qMsg = "✅ Saved to Drive!\n\n📂 " + qLinks.length + " parts saved";
         if (qCustomName) {
