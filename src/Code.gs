@@ -295,6 +295,186 @@ function buildAddOn(e) {
 
 
 // ============================================================
+// SCHEDULED-ONLY CARD — shown after scheduling (replaces full card)
+// Shows just the pending jobs for this thread + settings button.
+// ============================================================
+function buildScheduledOnlyCard(threadId, subject) {
+  var displaySubject = subject && subject.length > 45 ? subject.substring(0, 42) + '...' : (subject || '');
+  var card = CardService.newCardBuilder()
+    .setHeader(
+      CardService.newCardHeader()
+        .setTitle('🗑️ Schedule to Trash')
+        .setSubtitle(displaySubject)
+        .setImageUrl('https://www.gstatic.com/images/icons/material/system/2x/delete_grey600_24dp.png')
+    );
+
+  card.addSection(buildScheduledSection(threadId, true));
+
+  var bottomSection = CardService.newCardSection();
+  bottomSection.addWidget(
+    CardService.newTextButton()
+      .setText('+ Schedule another time')
+      .setOnClickAction(CardService.newAction().setFunctionName('refreshToFullCard')
+        .setParameters({ threadId: threadId, subject: subject || '' }))
+      .setTextButtonStyle(CardService.TextButtonStyle.TEXT)
+  );
+  bottomSection.addWidget(
+    CardService.newTextButton()
+      .setText('⚙️ Settings')
+      .setOnClickAction(CardService.newAction().setFunctionName('buildSettingsCard'))
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#455A64')
+  );
+  card.addSection(bottomSection);
+  return card.build();
+}
+
+
+// Returns to full scheduling card from scheduled-only card
+function refreshToFullCard(e) {
+  var threadId = e.parameters.threadId;
+  var subject  = e.parameters.subject || '';
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().updateCard(buildFullThreadCard(threadId)))
+    .build();
+}
+
+
+// Builds the full thread card (same as buildAddOn but callable with just threadId)
+function buildFullThreadCard(threadId) {
+  var thread  = GmailApp.getThreadById(threadId);
+  var subject = thread ? thread.getFirstMessageSubject() : '';
+  var settings = getSettings();
+  var displaySubject = subject.length > 45 ? subject.substring(0, 42) + '...' : subject;
+  var now = new Date();
+
+  var props    = PropertiesService.getUserProperties();
+  var allProps = props.getProperties();
+  var activeCount = 0;
+  Object.keys(allProps).forEach(function(key) {
+    if (key.indexOf('job_') !== 0) return;
+    try {
+      var job = JSON.parse(allProps[key]);
+      if (job.threadId === threadId && job.targetMs > Date.now()) activeCount++;
+    } catch (err) {}
+  });
+
+  var subtitle    = displaySubject + (activeCount > 0 ? '  •  ' + activeCount + ' job(s) pending' : '');
+  var actionLabel = settings.actionType === 'archive' ? 'Archive' : 'Trash';
+  var quickColor  = settings.actionType === 'archive' ? '#2E7D32' : '#E53935';
+
+  var card = CardService.newCardBuilder()
+    .setHeader(
+      CardService.newCardHeader()
+        .setTitle('🗑️ Schedule to Trash')
+        .setSubtitle(subtitle)
+        .setImageUrl('https://www.gstatic.com/images/icons/material/system/2x/delete_grey600_24dp.png')
+    );
+
+  // Quick Schedule
+  var quickSection = CardService.newCardSection().setHeader('⚡ Quick Schedule');
+  var quickOptions = [
+    { label: '1 hour',     minutes: 60 },
+    { label: '3 hours',    minutes: 180 },
+    { label: '6 hours',    minutes: 360 },
+    { label: '12 hours',   minutes: 720 },
+  ];
+  quickOptions.forEach(function(opt) {
+    var targetTime = new Date(now.getTime() + opt.minutes * 60 * 1000);
+    quickSection.addWidget(
+      CardService.newTextButton()
+        .setText(actionLabel + ' in ' + opt.label + '  (' + formatTime(targetTime) + ')')
+        .setOnClickAction(
+          CardService.newAction().setFunctionName('confirmSchedule').setParameters({
+            threadId: threadId, subject: subject,
+            delayMinutes: String(opt.minutes), label: opt.label,
+            targetMs: String(targetTime.getTime())
+          })
+        )
+        .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+        .setBackgroundColor(quickColor)
+    );
+  });
+
+  // Day-based
+  var daySection = CardService.newCardSection().setHeader('📅 Day-based');
+  var tomorrow   = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  daySection.addWidget(
+    CardService.newTextButton()
+      .setText('Tomorrow  (' + formatDateTime(tomorrow) + ')')
+      .setOnClickAction(
+        CardService.newAction().setFunctionName('confirmSchedule').setParameters({
+          threadId: threadId, subject: subject,
+          delayMinutes: String(24 * 60), label: 'tomorrow',
+          targetMs: String(tomorrow.getTime())
+        })
+      )
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#F57C00')
+  );
+  var dayOptions = [
+    { label: '3 days',  minutes: 3  * 24 * 60 },
+    { label: '1 week',  minutes: 7  * 24 * 60 },
+    { label: '2 weeks', minutes: 14 * 24 * 60 },
+    { label: '3 weeks', minutes: 21 * 24 * 60 },
+    { label: '1 month', minutes: 30 * 24 * 60 },
+  ];
+  dayOptions.forEach(function(opt) {
+    var targetTime = new Date(now.getTime() + opt.minutes * 60 * 1000);
+    daySection.addWidget(
+      CardService.newTextButton()
+        .setText(actionLabel + ' in ' + opt.label + '  (' + formatDate(targetTime) + ')')
+        .setOnClickAction(
+          CardService.newAction().setFunctionName('confirmSchedule').setParameters({
+            threadId: threadId, subject: subject,
+            delayMinutes: String(opt.minutes), label: opt.label,
+            targetMs: String(targetTime.getTime())
+          })
+        )
+        .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+        .setBackgroundColor('#1565C0')
+    );
+  });
+
+  // Custom
+  var customSection = CardService.newCardSection().setHeader('⏰ Custom Time');
+  customSection.addWidget(
+    CardService.newTextInput().setFieldName('customMinutes').setTitle('Minutes from now').setHint('e.g. 90')
+  );
+  customSection.addWidget(
+    CardService.newTextButton()
+      .setText('Schedule Custom Time')
+      .setOnClickAction(
+        CardService.newAction().setFunctionName('scheduleCustomTrash').setParameters({ threadId: threadId, subject: subject })
+      )
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#6A1B9A')
+  );
+
+  // Scheduled jobs
+  var scheduledSection = buildScheduledSection(threadId, false);
+
+  // Settings
+  var bottomSection = CardService.newCardSection();
+  bottomSection.addWidget(
+    CardService.newTextButton()
+      .setText('⚙️ Settings')
+      .setOnClickAction(CardService.newAction().setFunctionName('buildSettingsCard'))
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor('#455A64')
+  );
+
+  card.addSection(quickSection)
+      .addSection(daySection)
+      .addSection(customSection)
+      .addSection(scheduledSection)
+      .addSection(bottomSection);
+
+  return card.build();
+}
+
+
+// ============================================================
 // CONFIRMATION CARD — shown before actually scheduling
 // ============================================================
 function confirmSchedule(e) {
@@ -377,13 +557,18 @@ function scheduleTrash(e) {
 
   var actionWord = settings.actionType === 'archive' ? 'archived' : 'trashed';
 
+  // Pop the confirmation card, then update the underlying thread card
+  // to show only the scheduled section — no need to manually refresh.
   return CardService.newActionResponseBuilder()
     .setNotification(
       CardService.newNotification()
         .setText('✅ Will be ' + actionWord + ' at ' + formatDateTime(targetTime))
     )
-    .setNavigation(CardService.newNavigation().popCard())
-    .setStateChanged(true)
+    .setNavigation(
+      CardService.newNavigation()
+        .popCard()
+        .updateCard(buildScheduledOnlyCard(p.threadId, p.subject))
+    )
     .build();
 }
 
@@ -432,10 +617,11 @@ function postponeJob(e) {
     props.setProperty(jobKey, JSON.stringify(job));
 
     var extraLabel = extraMinutes >= 60 ? (extraMinutes / 60) + 'h' : extraMinutes + 'm';
+    var threadId   = e.parameters.threadId || job.threadId;
     return CardService.newActionResponseBuilder()
       .setNotification(CardService.newNotification()
         .setText('⏩ Postponed by ' + extraLabel + ' → now at ' + formatDateTime(newTarget)))
-      .setStateChanged(true)
+      .setNavigation(CardService.newNavigation().updateCard(buildScheduledOnlyCard(threadId, job.subject)))
       .build();
   } catch (err) {
     return CardService.newActionResponseBuilder()
@@ -460,9 +646,17 @@ function cancelScheduledTrash(e) {
 
   props.deleteProperty(jobKey);
 
+  // Rebuild the full card immediately so the cancelled job disappears
+  var threadId = e.parameters.jobKey; // fallback
+  try {
+    // jobKey is like "job_<uuid>" — we stored threadId in the job before deleting
+    // We pass threadId via a separate parameter from cancel buttons
+    threadId = e.parameters.threadId || threadId;
+  } catch(err) {}
+
   return CardService.newActionResponseBuilder()
     .setNotification(CardService.newNotification().setText('🚫 Scheduled job cancelled.'))
-    .setStateChanged(true)
+    .setNavigation(CardService.newNavigation().updateCard(buildFullThreadCard(threadId)))
     .build();
 }
 
@@ -707,7 +901,7 @@ function saveToggleSetting(e) {
 // ============================================================
 // SCHEDULED JOBS SECTION (for current thread card)
 // ============================================================
-function buildScheduledSection(threadId) {
+function buildScheduledSection(threadId, scheduledOnly) {
   var section  = CardService.newCardSection().setHeader('🕐 Scheduled for this thread');
   var props    = PropertiesService.getUserProperties();
   var allProps = props.getProperties();
@@ -732,7 +926,7 @@ function buildScheduledSection(threadId) {
 
       section.addWidget(row);
 
-      // Postpone buttons
+      // Postpone + Cancel buttons — pass threadId so cancel can rebuild correctly
       section.addWidget(
         CardService.newButtonSet()
           .addButton(
@@ -741,7 +935,7 @@ function buildScheduledSection(threadId) {
               .setOnClickAction(
                 CardService.newAction()
                   .setFunctionName('postponeJob')
-                  .setParameters({ jobKey: key, extraMinutes: '60' })
+                  .setParameters({ jobKey: key, extraMinutes: '60', threadId: threadId })
               )
           )
           .addButton(
@@ -750,7 +944,7 @@ function buildScheduledSection(threadId) {
               .setOnClickAction(
                 CardService.newAction()
                   .setFunctionName('postponeJob')
-                  .setParameters({ jobKey: key, extraMinutes: String(24 * 60) })
+                  .setParameters({ jobKey: key, extraMinutes: String(24 * 60), threadId: threadId })
               )
           )
           .addButton(
@@ -759,14 +953,15 @@ function buildScheduledSection(threadId) {
               .setOnClickAction(
                 CardService.newAction()
                   .setFunctionName('cancelScheduledTrash')
-                  .setParameters({ jobKey: key })
+                  .setParameters({ jobKey: key, threadId: threadId })
               )
           )
       );
     } catch (err) {}
   });
 
-  if (!found) {
+  // In full card: show "no jobs" placeholder. In scheduled-only card: show nothing if empty.
+  if (!found && !scheduledOnly) {
     section.addWidget(
       CardService.newTextParagraph().setText('No scheduled jobs for this thread.')
     );
