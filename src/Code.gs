@@ -55,7 +55,7 @@ function buildMainCard(url, statusMsg) {
   // Show resume button if there's an active job
   if (activeJobId) {
     var resumeJobBtn = CardService.newTextButton()
-      .setText("▶️ Resume Active Download (Part " + (parseInt(activePartIdx)+1) + ")")
+      .setText("▶️ Resume Active Download")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onCheckStatus")
