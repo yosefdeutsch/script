@@ -1,5 +1,5 @@
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const RENDER_URL   = "http://193.122.146.242:5000";
+const SERVER_URL   = "http://193.122.146.242:5000";
 const API_SECRET   = "mybotdownloader123";
 const DRIVE_FOLDER = "1uyvFqXejRjamnKFGKMGT1lhYqvDO9Acb";
 // ──────────────────────────────────────────────────────────────────────────
