@@ -81,7 +81,7 @@ function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
   var navSection = CardService.newCardSection();
   var homeBtnTop = CardService.newTextButton()
     .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
   navSection.addWidget(homeBtnTop);
   card.addSection(navSection);
 
@@ -112,7 +112,7 @@ function buildFormatCard(url, cookiesFileId, customName, formats, audioOnly) {
 
   var backBtn = CardService.newTextButton()
     .setText("← Back")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
 
   section.addWidget(formatSelect);
   section.addWidget(downloadBtn);
@@ -127,7 +127,7 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
   var navSection  = CardService.newCardSection();
   var homeBtn     = CardService.newTextButton()
     .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
   navSection.addWidget(homeBtn);
   card.addSection(navSection);
 
@@ -163,7 +163,7 @@ function buildStatusCard(msg, jobId, resumeJobId, resumeFrom) {
   if (!jobId && !resumeJobId) {
     var newBtn = CardService.newTextButton()
       .setText("⬇️ Download Another Video")
-      .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+      .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
     statusSection.addWidget(newBtn);
   }
 
@@ -503,7 +503,7 @@ function onCheckStatus(e) {
       qSection.addWidget(
         CardService.newTextButton()
           .setText("⬇️ Download Another Video")
-          .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"))
+          .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"))
       );
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(qCard.addSection(qSection).build()))
@@ -724,7 +724,7 @@ function onCheckStatus(e) {
       statusSection.addWidget(
         CardService.newTextButton()
           .setText("⬇️ Download Another Video")
-          .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"))
+          .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"))
       );
       return CardService.newActionResponseBuilder()
         .setNavigation(CardService.newNavigation().updateCard(card.addSection(statusSection).build()))
@@ -788,7 +788,7 @@ function buildHistoryCard() {
   var navSection = CardService.newCardSection();
   var homeBtnTop = CardService.newTextButton()
     .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
   navSection.addWidget(homeBtnTop);
   card.addSection(navSection);
 
@@ -813,7 +813,7 @@ function buildHistoryCard() {
 
   var backBtn = CardService.newTextButton()
     .setText("← Back")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
   section.addWidget(backBtn);
 
   var clearBtn = CardService.newTextButton()
@@ -878,7 +878,7 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
   var navSection = CardService.newCardSection();
   var homeBtnTop = CardService.newTextButton()
     .setText("🏠 Home")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
   navSection.addWidget(homeBtnTop);
   card.addSection(navSection);
 
@@ -941,7 +941,7 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
 
   var backBtn = CardService.newTextButton()
     .setText("← Back")
-    .setOnClickAction(CardService.newAction().setFunctionName("buildAddOn"));
+    .setOnClickAction(CardService.newAction().setFunctionName("onGoHome"));
   section.addWidget(backBtn);
 
   card.addSection(section);
@@ -1486,4 +1486,9 @@ function debugTestFmt4() {
     muteHttpExceptions: true
   });
   Logger.log(response.getContentText());
+}
+function onGoHome() {
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().popToRoot())
+    .build();
 }
