@@ -214,7 +214,7 @@ function onGetFormats(e) {
 
   // For YouTube audio — verify cookies work before downloading
   if (audioOnly && isYouTube) {
-    var checkRes = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+    var checkRes = UrlFetchApp.fetch(SERVER_URL + "/formats", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
@@ -278,7 +278,7 @@ function onGetFormats(e) {
       folder_id:       DRIVE_FOLDER,
       audio_only:      audioOnly
     };
-    var directRes = UrlFetchApp.fetch(RENDER_URL + "/download", {
+    var directRes = UrlFetchApp.fetch(SERVER_URL + "/download", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify(directPayload),
@@ -297,7 +297,7 @@ function onGetFormats(e) {
   }
 
   try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+    var response = UrlFetchApp.fetch(SERVER_URL + "/formats", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
@@ -419,7 +419,7 @@ function onDownloadFormat(e) {
       audio_only:      audioOnly
     };
 
-    var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
+    var response = UrlFetchApp.fetch(SERVER_URL + "/download", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify(payload),
@@ -460,7 +460,7 @@ function onCheckStatus(e) {
 
   try {
     // NEW: Check if job is done with direct Drive upload (no size limit)
-    var quickStatusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+    var quickStatusRes = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId, { muteHttpExceptions: true });
     var quickStatus;
     try { quickStatus = JSON.parse(quickStatusRes.getContentText()); } catch(eq) { quickStatus = {}; }
 
@@ -518,7 +518,7 @@ function onCheckStatus(e) {
 
     // Check if this specific part is ready
     var partRes = UrlFetchApp.fetch(
-      RENDER_URL + "/part_ready/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
+      SERVER_URL + "/part_ready/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
       { muteHttpExceptions: true }
     );
     var info;
@@ -540,7 +540,7 @@ function onCheckStatus(e) {
     // Job not found — either still starting or server restarted
     if (info.status === "not_found") {
       // Check if job exists at all
-      var checkRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+      var checkRes = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId, { muteHttpExceptions: true });
       var checkJob;
       try { checkJob = JSON.parse(checkRes.getContentText()); } catch(e) { checkJob = {}; }
       
@@ -560,7 +560,7 @@ function onCheckStatus(e) {
 
     // Job failed
     if (info.job_status === "error") {
-      var statusRes = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+      var statusRes = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId, { muteHttpExceptions: true });
       var job       = JSON.parse(statusRes.getContentText());
       var errMsg    = job.message || "";
       errMsg = "❌ " + errMsg;
@@ -579,7 +579,7 @@ function onCheckStatus(e) {
 
     // Part is ready — fetch and save it NOW
     var fileRes = UrlFetchApp.fetch(
-      RENDER_URL + "/part/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
+      SERVER_URL + "/part/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
       { muteHttpExceptions: true }
     );
 
@@ -592,7 +592,7 @@ function onCheckStatus(e) {
     }
 
     // Get job info for custom name and total parts
-    var statusRes2 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, { muteHttpExceptions: true });
+    var statusRes2 = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId, { muteHttpExceptions: true });
     var jobInfo;
     try {
       jobInfo = JSON.parse(statusRes2.getContentText());
@@ -613,7 +613,7 @@ function onCheckStatus(e) {
         // Get real filename from server
         try {
           var fnameRes2  = UrlFetchApp.fetch(
-            RENDER_URL + "/filename/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
+            SERVER_URL + "/filename/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
             { muteHttpExceptions: true }
           );
           var fnameData2 = JSON.parse(fnameRes2.getContentText());
@@ -650,7 +650,7 @@ function onCheckStatus(e) {
       // Get real filename from server (preserves Hebrew and Unicode)
       try {
         var fnameRes  = UrlFetchApp.fetch(
-          RENDER_URL + "/filename/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
+          SERVER_URL + "/filename/" + jobId + "/" + partIndex + "?secret=" + encodeURIComponent(API_SECRET),
           { muteHttpExceptions: true }
         );
         var fnameData = JSON.parse(fnameRes.getContentText());
@@ -739,25 +739,25 @@ function onCheckStatus(e) {
 }
 function checkLastJob() {
   var jobId = "PASTE_YOUR_LAST_JOB_ID_HERE";
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  var response = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
 function checkJobDebug() {
   var jobId = "902c25ec-e32d-4394-8fae-28cffd3b6129";
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  var response = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
 function debugJob() {
   var jobId = "902c25ec-e32d-4394-8fae-28cffd3b6129";
   var response = UrlFetchApp.fetch(
-    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET)
+    SERVER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET)
   );
   Logger.log(response.getContentText());
 }
 function debugLatest() {
   var jobId = "0a00b5cc-6093-40dd-8517-318437f7ce33";
   var response = UrlFetchApp.fetch(
-    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
+    SERVER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
     { muteHttpExceptions: true }
   );
   Logger.log(response.getContentText());
@@ -840,7 +840,7 @@ function onViewHistory(e) {
 // ── YouTube Search ─────────────────────────────────────────────────────────
 function onYouTubeSearch(query, audioOnly, cookiesContent) {
   try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+    var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify({
@@ -889,7 +889,7 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
 
     // Thumbnail
     try {
-      var proxiedThumb = RENDER_URL + "/thumbnail?url=" + encodeURIComponent(r.thumbnail);
+      var proxiedThumb = SERVER_URL + "/thumbnail?url=" + encodeURIComponent(r.thumbnail);
       var img = CardService.newImage()
         .setImageUrl(proxiedThumb)
         .setAltText(r.title);
@@ -962,7 +962,7 @@ function onLoadMoreResults(e) {
   }
 
   try {
-    var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+    var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify({
@@ -1008,7 +1008,7 @@ function onDownloadSearchResult(e) {
 
   if (audioOnly) {
     // Check cookies first
-    var checkRes  = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+    var checkRes  = UrlFetchApp.fetch(SERVER_URL + "/formats", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
@@ -1033,7 +1033,7 @@ function onDownloadSearchResult(e) {
       folder_id:       DRIVE_FOLDER,
       audio_only:      true
     };
-    var response = UrlFetchApp.fetch(RENDER_URL + "/download", {
+    var response = UrlFetchApp.fetch(SERVER_URL + "/download", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify(payload),
@@ -1060,7 +1060,7 @@ function onDownloadSearchResult(e) {
 
   } else {
     // Show format picker — same as normal video download
-    var formatsRes = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+    var formatsRes = UrlFetchApp.fetch(SERVER_URL + "/formats", {
       method:             "post",
       contentType:        "application/json",
       payload:            JSON.stringify({ secret: API_SECRET, url: url, cookies_content: cookiesContent }),
@@ -1131,7 +1131,7 @@ function debugAudioFormats() {
   var cookiesFileId  = "1MsjoeHV6m3HzyLKx7TVkO6raSbBUbiDI";
   var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/formats", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1147,7 +1147,7 @@ function saveCookiesId() {
 }
 function checkLastError() {
   var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  var response = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
 function checkCookies() {
@@ -1166,18 +1166,18 @@ function saveCookiesId() {
 }
 function checkRunning() {
   var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId);
+  var response = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId);
   Logger.log(response.getContentText());
 }
 function checkRunning() {
   var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
-  var response = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
+  var response = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId, {muteHttpExceptions: true});
   Logger.log(response.getContentText());
 }
 function debugLatestJob() {
   var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
   var response = UrlFetchApp.fetch(
-    RENDER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
+    SERVER_URL + "/debug/" + jobId + "?secret=" + encodeURIComponent(API_SECRET),
     { muteHttpExceptions: true }
   );
   Logger.log(response.getContentText());
@@ -1186,7 +1186,7 @@ function testSearch() {
   var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
   var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
     method:             "post",
     contentType:        "application/json",
     payload:            JSON.stringify({
@@ -1199,7 +1199,7 @@ function testSearch() {
   Logger.log(response.getContentText());
 }
 function testSearchChannel() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1212,7 +1212,7 @@ function testSearchChannel() {
   Logger.log(response.getContentText());
 }
 function debugChannel() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_channel", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_channel", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({ secret: API_SECRET }),
@@ -1221,7 +1221,7 @@ function debugChannel() {
   Logger.log(response.getContentText());
 }
 function debugRSS() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_rss", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_rss", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({ secret: API_SECRET }),
@@ -1232,7 +1232,7 @@ function debugRSS() {
 function checkLastStatus() {
   var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
   var response = UrlFetchApp.fetch(
-    RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
+    SERVER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET),
     { muteHttpExceptions: true }
   );
   Logger.log("Code: " + response.getResponseCode());
@@ -1242,11 +1242,11 @@ function diagnose() {
   var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
   Logger.log("Job ID: " + jobId);
   
-  var r1 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
+  var r1 = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId, {muteHttpExceptions: true});
   Logger.log("Status code: " + r1.getResponseCode());
   Logger.log("Status body: " + r1.getContentText().substring(0, 300));
   
-  var r2 = UrlFetchApp.fetch(RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
+  var r2 = UrlFetchApp.fetch(SERVER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
   Logger.log("Part_ready code: " + r2.getResponseCode());
   Logger.log("Part_ready body: " + r2.getContentText().substring(0, 300));
 }
@@ -1254,17 +1254,17 @@ function diagnoseDrive() {
   var jobId = PropertiesService.getUserProperties().getProperty("active_job_id");
   Logger.log("Job ID: " + jobId);
   
-  var r1 = UrlFetchApp.fetch(RENDER_URL + "/status/" + jobId, {muteHttpExceptions: true});
+  var r1 = UrlFetchApp.fetch(SERVER_URL + "/status/" + jobId, {muteHttpExceptions: true});
   Logger.log("Status: " + r1.getContentText().substring(0, 300));
   
-  var r2 = UrlFetchApp.fetch(RENDER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
+  var r2 = UrlFetchApp.fetch(SERVER_URL + "/part_ready/" + jobId + "/0?secret=" + encodeURIComponent(API_SECRET), {muteHttpExceptions: true});
   Logger.log("Part ready: " + r2.getContentText().substring(0, 300));
 }
 function checkFormatsDebug() {
   var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
   var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/formats", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1277,7 +1277,7 @@ function checkFormatsDebug() {
   Logger.log(response.getContentText());
 }
 function testProxy() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_proxy", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_proxy", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({ secret: API_SECRET }),
@@ -1295,7 +1295,7 @@ function checkFormatsDebug() {
   var cookiesFileId  = PropertiesService.getUserProperties().getProperty("youtube_cookies_id");
   var cookiesContent = DriveApp.getFileById(cookiesFileId).getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/formats", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/formats", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1308,7 +1308,7 @@ function checkFormatsDebug() {
   Logger.log(response.getContentText());
 }
 function testOracleSearch() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1321,7 +1321,7 @@ function testOracleSearch() {
   Logger.log(response.getContentText().substring(0, 500));
 }
 function checkThumbUrl() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1338,7 +1338,7 @@ function checkThumbUrl() {
   Logger.log("Type: " + typeof thumb);
 }
 function testThumbnail() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1358,7 +1358,7 @@ function testThumbnail() {
   Logger.log("Content-Type: " + imgResponse.getHeaders()["Content-Type"]);
 }
 function testChannelThumbs() {
-  var response = UrlFetchApp.fetch(RENDER_URL + "/search", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/search", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1385,7 +1385,7 @@ function debugBestFormat() {
   var file = DriveApp.getFileById(cookiesFileId);
   var cookiesContent = file.getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_best_format", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1402,7 +1402,7 @@ function debugListFormats() {
   var file = DriveApp.getFileById(cookiesFileId);
   var cookiesContent = file.getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_best_format", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1420,7 +1420,7 @@ function debugTestFmt() {
   var file = DriveApp.getFileById(cookiesFileId);
   var cookiesContent = file.getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_best_format", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1438,7 +1438,7 @@ function debugTestFmt2() {
   var file = DriveApp.getFileById(cookiesFileId);
   var cookiesContent = file.getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_best_format", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1456,7 +1456,7 @@ function debugTestFmt3() {
   var file = DriveApp.getFileById(cookiesFileId);
   var cookiesContent = file.getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_best_format", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
@@ -1474,7 +1474,7 @@ function debugTestFmt4() {
   var file = DriveApp.getFileById(cookiesFileId);
   var cookiesContent = file.getBlob().getDataAsString();
   
-  var response = UrlFetchApp.fetch(RENDER_URL + "/debug_best_format", {
+  var response = UrlFetchApp.fetch(SERVER_URL + "/debug_best_format", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
