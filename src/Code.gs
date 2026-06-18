@@ -904,7 +904,7 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
 
     // Download button
     var videoBtn = CardService.newTextButton()
-      .setText("⬇️ Video")
+      .setText("🎬 Video")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onDownloadSearchResult")
