@@ -1307,8 +1307,8 @@ function checkFormatsDebug() {
   });
   Logger.log(response.getContentText());
 }
-function onGoHome() {
+function onGoHome(e) {
   return CardService.newActionResponseBuilder()
-    .setNavigation(CardService.newNavigation().popToRoot())
+    .setNavigation(CardService.newNavigation().updateCard(buildAddOn(e)))
     .build();
 }
