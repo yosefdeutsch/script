@@ -36,7 +36,7 @@ function buildMainCard(url, statusMsg) {
   var audioSwitch = CardService.newSelectionInput()
     .setType(CardService.SelectionInputType.CHECK_BOX)
     .setFieldName("audio_only")
-    .addItem("🎵 Audio only (MP3) — for direct links", "yes", false);
+    .addItem("🎵 Audio only — for links", "yes", false);
 
   var getFormatsBtn = CardService.newTextButton()
     .setText("🔍 Search")
@@ -904,21 +904,23 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
 
     // Download button
     var videoBtn = CardService.newTextButton()
-      .setText("⬇️ Download Video")
+      .setText("⬇️ Video")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onDownloadSearchResult")
           .setParameters({ video_url: r.url, audio_only: "no" })
       );
     var audioBtn = CardService.newTextButton()
-      .setText("🎵 Download MP3")
+      .setText("🎵 Audio")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onDownloadSearchResult")
           .setParameters({ video_url: r.url, audio_only: "yes" })
       );
-    section.addWidget(videoBtn);
-    section.addWidget(audioBtn);
+    var btnSet = CardService.newButtonSet()
+      .addButton(videoBtn)
+      .addButton(audioBtn);
+    section.addWidget(btnSet);
     section.addWidget(CardService.newDivider());
   }
 
