@@ -36,7 +36,7 @@ function buildMainCard(url, statusMsg) {
   var audioSwitch = CardService.newSelectionInput()
     .setType(CardService.SelectionInputType.CHECK_BOX)
     .setFieldName("audio_only")
-    .addItem("🎵 Audio only (MP3)", "yes", false);
+    .addItem("🎵 Audio only (MP3) — for direct links", "yes", false);
 
   var getFormatsBtn = CardService.newTextButton()
     .setText("🔍 Search")
