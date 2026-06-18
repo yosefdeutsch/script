@@ -903,17 +903,22 @@ function buildSearchResultsCard(results, audioOnly, query, hasMore, nextPage) {
     section.addWidget(CardService.newTextParagraph().setText(info));
 
     // Download button
-    var downloadBtn = CardService.newTextButton()
-      .setText(audioOnly ? "🎵 Download MP3" : "⬇️ Download Video")
+    var videoBtn = CardService.newTextButton()
+      .setText("⬇️ Download Video")
       .setOnClickAction(
         CardService.newAction()
           .setFunctionName("onDownloadSearchResult")
-          .setParameters({
-            video_url:  r.url,
-            audio_only: audioOnly ? "yes" : "no"
-          })
+          .setParameters({ video_url: r.url, audio_only: "no" })
       );
-    section.addWidget(downloadBtn);
+    var audioBtn = CardService.newTextButton()
+      .setText("🎵 Download MP3")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("onDownloadSearchResult")
+          .setParameters({ video_url: r.url, audio_only: "yes" })
+      );
+    section.addWidget(videoBtn);
+    section.addWidget(audioBtn);
     section.addWidget(CardService.newDivider());
   }
 
